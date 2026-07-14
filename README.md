@@ -45,6 +45,7 @@ spur           # scan everything, check upstream, show the report
 spur scan      # just rescan what's installed (no network)
 spur check     # just re-check against upstream
 spur status    # show the last report, instantly
+spur dashboard # start the local dashboard and open it in your browser
 ```
 
 Here's the kind of thing it hands back — worst offenders first, one row per installed copy:
@@ -77,13 +78,12 @@ The heavy lifting is `git ls-remote` — no rate limits, works with any git host
 
 ## What's under the hood
 
-An npm workspaces monorepo — one engine, two thin surfaces on top:
+An npm workspaces monorepo — one engine, one thin surface on top:
 
 | Package | What it does |
 |---|---|
-| [`packages/engine`](packages/engine) | The brain. Scans, resolves sources, checks upstream, stores the sqlite index. Ships as [`@soundwala/spur`](https://www.npmjs.com/package/@soundwala/spur). |
+| [`packages/engine`](packages/engine) | The brain. Scans, resolves sources, checks upstream, stores the sqlite index — and now also serves the local dashboard. Ships as [`@soundwala/spur`](https://www.npmjs.com/package/@soundwala/spur). |
 | [`packages/claude-plugin`](packages/claude-plugin) | Wires the engine into Claude Code as a chat skill. |
-| [`packages/dashboard`](packages/dashboard) | A tiny local web server that renders the same index. |
 
 Want to hack on it?
 
