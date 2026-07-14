@@ -51,6 +51,7 @@ test('scan finds marketplace plugins, loose skills, and registers self', async (
   assert.equal(plugin?.install_method, 'marketplace');
   assert.equal(plugin?.installed_commit, '6fd4507659784c351abbd2bc264c7162cfd386dc');
   assert.equal(plugin?.source_url, 'https://github.com/anthropics/claude-plugins-official');
+  assert.equal(plugin?.marketplace, 'official');
 
   const skill = items.find((i) => i.name === 'my-skill');
   assert.ok(skill, 'loose skill found');

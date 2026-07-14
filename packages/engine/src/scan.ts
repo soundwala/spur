@@ -85,6 +85,7 @@ function scanMarketplacePlugins(home: string): ScannedItem[] {
         source_url: source.url,
         source_ref: null,
         source_path: source.path,
+        marketplace: marketplaceName,
         installed_commit: rec.gitCommitSha ?? null,
         // records without a sha often carry the literal version "unknown";
         // the installed copy's own plugin.json is the next-best witness
