@@ -1,6 +1,6 @@
 export type EntryType = 'skill' | 'plugin';
 
-export type InstallMethod = 'marketplace' | 'git' | 'cli-manifest' | 'npm' | 'unknown';
+export type InstallMethod = 'marketplace' | 'git' | 'cli-manifest' | 'npm' | 'github-skill' | 'unknown';
 
 export type Scope = 'user' | 'project';
 
@@ -74,4 +74,18 @@ export interface StatusReport {
   db_path: string;
   summary: StatusSummary;
   entries: Entry[];
+}
+
+/** Provenance for GitHub-installed skills: one repo → the skills it ships. */
+export interface SkillSource {
+  repo: string;
+  ref: string | null;                 // null = default branch / latest tag
+  version_source: 'tag';              // latest semver tag is the version signal
+  skills: Record<string, string>;     // skill name -> subpath within the repo
+  adopted_version: string | null;     // recorded baseline; null = decide by content
+}
+
+export interface SourceStore {
+  sources: SkillSource[];
+  local: string[];                    // skill names the user marked as having no upstream
 }
