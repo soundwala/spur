@@ -4,6 +4,8 @@ import { getStatus } from '../status.js';
 import { scan } from '../scan.js';
 import { check } from '../check.js';
 import { update } from '../update.js';
+import { adopt } from '../adopt.js';
+import { markLocal, loadStore } from '../sources.js';
 import { renderPage } from './page.js';
 import { openBrowser } from './open.js';
 
@@ -42,9 +44,30 @@ export function startDashboard(opts: { port?: number; open?: boolean } = {}): Se
           const results = await update(db, { ids: Array.isArray(body.ids) ? body.ids : [] });
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(JSON.stringify(results));
+        } else if (url.pathname === '/api/mark-local' && req.method === 'POST') {
+          let body: { name?: unknown };
+          try { body = await readJson(req); } catch { res.writeHead(400); res.end('{"error":"invalid json body"}'); return; }
+          if (typeof body.name !== 'string' || !body.name) { res.writeHead(400); res.end('{"error":"name required"}'); return; }
+          markLocal(body.name);
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(getStatus(db, defaultDbPath())));
+        } else if (url.pathname === '/api/adopt' && req.method === 'POST') {
+          let body: { repo?: unknown; project?: unknown };
+          try { body = await readJson(req); } catch { res.writeHead(400); res.end('{"error":"invalid json body"}'); return; }
+          if (typeof body.repo !== 'string' || !body.repo) { res.writeHead(400); res.end('{"error":"repo required"}'); return; }
+          try {
+            const result = await adopt(db, body.repo, { project: typeof body.project === 'string' ? body.project : undefined });
+            await scan(db); // re-label the newly-adopted skills as github-skill before checking
+            await check(db);
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(502, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
         } else if (url.pathname === '/') {
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-          res.end(renderPage(getStatus(db, defaultDbPath()).entries));
+          res.end(renderPage(getStatus(db, defaultDbPath()).entries, { local: loadStore().local }));
         } else {
           res.writeHead(404, { 'content-type': 'text/plain' });
           res.end('not found');
