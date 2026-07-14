@@ -4,6 +4,7 @@ import { openDb, defaultDbPath } from './db.js';
 import { scan } from './scan.js';
 import { check } from './check.js';
 import { getStatus } from './status.js';
+import { update } from './update.js';
 import { gitAvailable } from './git.js';
 
 const HELP = `spur — Skill & Plugin Update Radar
@@ -13,6 +14,7 @@ Usage:
   spur scan         rescan install locations, print status (no upstream calls)
   spur check        check known entries against upstream, print status
   spur status       print the last stored status without scanning or checking
+  spur update [ids…]  update entries (all stale with --all, or by id)
 
 Options:
   --db <path>       index location (default: ~/.spur/index.db, or $SPUR_HOME)
@@ -28,6 +30,7 @@ async function main(): Promise<void> {
       db: { type: 'string' },
       'no-enrich': { type: 'boolean', default: false },
       compact: { type: 'boolean', default: false },
+      all: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -50,7 +53,13 @@ async function main(): Promise<void> {
       }
       await check(db, { enrich: !values['no-enrich'] });
     }
-    if (!['scan', 'check', 'status', 'all'].includes(command)) {
+    if (command === 'update') {
+      const ids = positionals.slice(1);
+      const results = await update(db, { ids: ids.length ? ids : undefined, all: values.all });
+      process.stdout.write(JSON.stringify(results, null, values.compact ? 0 : 2) + '\n');
+      return;
+    }
+    if (!['scan', 'check', 'status', 'update', 'all'].includes(command)) {
       process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
       process.exitCode = 2;
       return;
