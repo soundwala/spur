@@ -68,6 +68,9 @@ export async function update(
 
 async function updateOne(e: Entry, run: CommandRunner): Promise<UpdateResult> {
   const base = { id: e.id, name: e.name, install_method: e.install_method };
+  if (e.status === 'error' || e.status === 'unknown_source') {
+    return { ...base, outcome: 'skipped', message: `not updated: status is ${e.status}`, restart_required: false };
+  }
   switch (e.install_method) {
     case 'marketplace': {
       if (!e.marketplace) {

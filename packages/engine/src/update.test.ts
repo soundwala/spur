@@ -74,6 +74,17 @@ test('unknown-method entry is skipped even when targeted by id', async () => {
   assert.equal(r?.outcome, 'skipped');
 });
 
+test('an error-status git entry is skipped even when targeted by id', async () => {
+  const db = tempDb();
+  const e = seedStale(db, { name: 'y', type: 'skill', install_method: 'git', scope: 'user', install_path: '/repo/y', installed_commit: 'aaa' });
+  db.prepare("UPDATE entries SET status='error' WHERE id=?").run(e.id);
+  const calls: string[][] = [];
+  const run: CommandRunner = async (cmd, args) => { calls.push([cmd, ...args]); return { ok: true, stdout: '', stderr: '' }; };
+  const [r] = await update(db, { ids: [e.id] }, run);
+  assert.equal(r?.outcome, 'skipped');
+  assert.equal(calls.length, 0); // no command ever run
+});
+
 test('a failing command yields failed without throwing', async () => {
   const db = tempDb();
   seedStale(db, mkt());
