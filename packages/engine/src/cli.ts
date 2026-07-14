@@ -17,11 +17,17 @@ Usage:
   spur status       print the last stored status without scanning or checking
   spur update [ids…]  update entries (all stale with --all, or by id)
   spur dashboard      start the local dashboard and open it in your browser
+  spur adopt <repo-url>            record a GitHub repo as the source for matching installed skills
+  spur add <repo-url> --skill <n>  install skill(s) from a GitHub repo (or --all)
 
 Options:
   --db <path>       index location (default: ~/.spur/index.db, or $SPUR_HOME)
   --no-enrich       skip GitHub compare-API enrichment (behind_count)
   --compact         single-line JSON output
+  --skill <name>    (add) skill to install; repeatable
+  --all             (add) install every skill the repo provides
+  --scope <s>       (add) user | project (default: user)
+  --project <path>  write provenance to <path>/.spur.json instead of the global store
   -h, --help        show this help
 `;
 
@@ -33,6 +39,9 @@ async function main(): Promise<void> {
       'no-enrich': { type: 'boolean', default: false },
       compact: { type: 'boolean', default: false },
       all: { type: 'boolean', default: false },
+      skill: { type: 'string', multiple: true },
+      scope: { type: 'string' },
+      project: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -50,6 +59,33 @@ async function main(): Promise<void> {
   const db = openDb(dbPath);
 
   try {
+    if (command === 'adopt') {
+      const repo = positionals[1];
+      if (!repo) { process.stderr.write('usage: spur adopt <repo-url>\n'); process.exitCode = 2; return; }
+      await scan(db);
+      const { adopt } = await import('./adopt.js');
+      const res = await adopt(db, repo, { project: values.project });
+      await scan(db); // re-label the newly-adopted skills as github-skill before checking
+      await check(db, { enrich: !values['no-enrich'] });
+      process.stdout.write(JSON.stringify(res, null, values.compact ? 0 : 2) + '\n');
+      return;
+    }
+    if (command === 'add') {
+      const repo = positionals[1];
+      if (!repo) { process.stderr.write('usage: spur add <repo-url> --skill <name>… | --all\n'); process.exitCode = 2; return; }
+      const { install } = await import('./adopt.js');
+      const scope = values.scope === 'project' ? 'project' : 'user';
+      const res = await install(repo, {
+        skills: values.skill as string[] | undefined,
+        all: values.all,
+        scope,
+        projectPath: values.project,
+      });
+      await scan(db);
+      await check(db, { enrich: !values['no-enrich'] });
+      process.stdout.write(JSON.stringify(res, null, values.compact ? 0 : 2) + '\n');
+      return;
+    }
     if (command === 'scan' || command === 'all') {
       await scan(db);
     }
@@ -65,7 +101,7 @@ async function main(): Promise<void> {
       process.stdout.write(JSON.stringify(results, null, values.compact ? 0 : 2) + '\n');
       return;
     }
-    if (!['scan', 'check', 'status', 'update', 'all'].includes(command)) {
+    if (!['scan', 'check', 'status', 'update', 'adopt', 'add', 'all'].includes(command)) {
       process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
       process.exitCode = 2;
       return;
