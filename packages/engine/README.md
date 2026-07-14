@@ -39,7 +39,7 @@ startDashboard({ open: true });  // serve the review-and-fix UI on http://localh
 
 ## How it detects staleness
 
-1. Marketplace plugins → `gitCommitSha` vs upstream HEAD (`git ls-remote`); if a record has no sha, fall back to catalog-version compare, then commit-activity in the plugin's subtree.
+1. Marketplace plugins → installed version vs the marketplace's published version (what `claude plugin update` acts on); if there's no version to compare, fall back to `gitCommitSha` vs upstream HEAD (`git ls-remote`), then commit-activity in the plugin's subtree.
 2. Git checkouts → local HEAD vs upstream.
 3. Installer-CLI manifests → recorded source/version.
 4. SPUR itself → installed version vs the npm registry.

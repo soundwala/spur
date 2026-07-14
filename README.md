@@ -54,7 +54,8 @@ Here's the kind of thing it hands back — worst offenders first, one row per in
 {
   "summary": { "total": 107, "fresh": 3, "stale": 4, "unknown_source": 100, "error": 0 },
   "entries": [
-    { "name": "superpowers", "install_method": "marketplace", "status": "stale", "behind_count": 187 },
+    { "name": "claude-mem", "install_method": "marketplace", "status": "stale", "installed_version": "13.5.5", "latest_version": "13.11.0" },
+    { "name": "superpowers", "install_method": "marketplace", "status": "fresh", "installed_version": "6.1.1", "latest_version": "6.1.1" },
     { "name": "@soundwala/spur", "is_self": true, "install_method": "npm", "status": "fresh" }
   ]
 }
@@ -68,7 +69,7 @@ SPUR is deliberately cheap first, thorough only where it counts:
 
 | What you installed | How SPUR checks it |
 |---|---|
-| 🏪 **Marketplace plugin** | Compares the recorded commit against upstream. No commit recorded? It falls back to version, then to "did anything change in this plugin's folder?" |
+| 🏪 **Marketplace plugin** | Compares the installed version against the marketplace's published version — the signal Claude Code actually updates on. No version to compare? Falls back to the recorded commit, then to "did anything change in this plugin's folder?" |
 | 🌿 **Git checkout** | Your local `HEAD` vs. what the remote has now. |
 | 📦 **Installer-CLI skill** | The source and version the installer wrote down. |
 | 🛰️ **SPUR itself** | Installed version vs. the npm registry. |

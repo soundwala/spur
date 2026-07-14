@@ -67,7 +67,7 @@ type CheckOutcome = Pick<
   'latest_commit' | 'latest_version' | 'behind_count' | 'status' | 'last_check_error' | 'last_checked_at'
 >;
 
-async function checkEntry(
+export async function checkEntry(
   entry: Entry,
   cachedLsRemote: (url: string, ref: string) => Promise<string | null>,
   cachedCatalog: (repo: string) => Promise<unknown>,
@@ -94,6 +94,17 @@ async function checkEntry(
   try {
     const latest = await cachedLsRemote(entry.source_url, entry.source_ref ?? 'HEAD');
     if (!latest) return fail(base, 'ls-remote: could not resolve upstream ref');
+
+    // Marketplace plugins are versioned by their published `version` — that is
+    // what `claude plugin update` acts on. Compare that BEFORE the commit sha,
+    // so a moved tag or an advancing monorepo branch tip doesn't mark a
+    // version-current plugin "stale (N behind)" that the update button can never
+    // clear. Falls through to the sha tier when versions aren't comparable.
+    if (entry.install_method === 'marketplace') {
+      const byVersion = await versionTier(entry, cachedCatalog);
+      if (byVersion) return { ...base, latest_commit: latest, ...byVersion };
+    }
+
     if (!entry.installed_commit) {
       return checkWithoutSha(entry, { ...base, latest_commit: latest }, cachedCatalog, token);
     }
@@ -124,6 +135,23 @@ async function checkNpm(entry: Entry, base: CheckOutcome): Promise<CheckOutcome>
 }
 
 /**
+ * Version tier: compare the installed version against the upstream catalog's
+ * published version. Returns null when either side has no comparable version,
+ * so the caller falls through to a commit-based tier.
+ */
+async function versionTier(
+  entry: Entry,
+  cachedCatalog: (repo: string) => Promise<unknown>,
+): Promise<Pick<CheckOutcome, 'latest_version' | 'status' | 'behind_count'> | null> {
+  const repo = githubRepoOf(entry.source_url);
+  if (!repo) return null;
+  const upstreamVersion = catalogVersionFor(await cachedCatalog(repo), entry.name);
+  const byVersion = versionOutcome(entry.installed_version, upstreamVersion);
+  if (!byVersion) return null;
+  return { latest_version: upstreamVersion, status: byVersion, behind_count: byVersion === 'fresh' ? 0 : null };
+}
+
+/**
  * Fallback for marketplace records that carry no gitCommitSha (seen in the
  * wild, e.g. frontend-design). Tier A compares versions against the upstream
  * catalog; tier B asks whether any commits touched the plugin's subtree since
@@ -138,11 +166,8 @@ async function checkWithoutSha(
   const repo = githubRepoOf(entry.source_url);
   if (!repo) return fail(base, 'no installed commit recorded and source is not on github.com');
 
-  const upstreamVersion = catalogVersionFor(await cachedCatalog(repo), entry.name);
-  const byVersion = versionOutcome(entry.installed_version, upstreamVersion);
-  if (byVersion) {
-    return { ...base, latest_version: upstreamVersion, status: byVersion, behind_count: byVersion === 'fresh' ? 0 : null };
-  }
+  const byVersion = await versionTier(entry, cachedCatalog);
+  if (byVersion) return { ...base, ...byVersion };
 
   if (entry.manifest_updated_at) {
     const commits = await commitsSince(repo, entry.source_path, entry.manifest_updated_at, token);

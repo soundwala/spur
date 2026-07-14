@@ -33,8 +33,14 @@ export function renderPage(entries: Entry[]): string {
         : e.status === 'fresh' ? 'badge-success">fresh'
         : e.status === 'unknown_source' ? 'badge-muted">untraceable'
         : `badge-muted">${esc(e.status)}`;
-      const installed = short(e.installed_commit) !== '—' ? short(e.installed_commit) : (e.installed_version ?? '—');
-      const latest = short(e.latest_commit) !== '—' ? short(e.latest_commit) : (e.latest_version ?? '—');
+      // Prefer a version delta (e.g. 13.5.5 → 13.11.0) whenever both sides carry
+      // a version — that's the signal marketplace/npm updates actually move.
+      // Fall back to commit shas for git checkouts and catalog-less marketplaces.
+      const useVersion = Boolean(e.installed_version && e.latest_version);
+      const col = (commit: string | null, version: string | null) =>
+        useVersion ? version! : short(commit) !== '—' ? short(commit) : (version ?? '—');
+      const installed = col(e.installed_commit, e.installed_version);
+      const latest = col(e.latest_commit, e.latest_version);
       return `<tr>
         <td>${box}</td>
         <td><span class="chip ${chip}"></span><span class="nm">${esc(e.name)}${e.is_self ? ' · itself' : ''}<em>${esc(e.install_method)}</em></span></td>
