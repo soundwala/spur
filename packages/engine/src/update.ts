@@ -1,7 +1,11 @@
 import { execFile } from 'node:child_process';
+import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Entry, InstallMethod } from './types.js';
 import { allEntries, updateCheckResult } from './db.js';
+import type { RepoOps } from './repo.js';
+import { realRepoOps, latestTag, copyDirOver } from './repo.js';
+import { setAdoptedVersion } from './sources.js';
 
 export type UpdateOutcome = 'updated' | 'skipped' | 'failed';
 
@@ -44,13 +48,14 @@ export async function update(
   db: DatabaseSync,
   opts: { ids?: string[]; all?: boolean },
   run: CommandRunner = realRunner,
+  repoOps: RepoOps = realRepoOps,
 ): Promise<UpdateResult[]> {
   const targets = selectTargets(allEntries(db), opts);
   const results: UpdateResult[] = [];
   for (const entry of targets) {
     let result: UpdateResult;
     try {
-      result = await updateOne(entry, run);
+      result = await updateOne(entry, run, repoOps);
     } catch (err) {
       result = {
         id: entry.id,
@@ -78,7 +83,7 @@ export async function update(
   return results;
 }
 
-async function updateOne(e: Entry, run: CommandRunner): Promise<UpdateResult> {
+export async function updateOne(e: Entry, run: CommandRunner, repoOps: RepoOps = realRepoOps): Promise<UpdateResult> {
   const base = { id: e.id, name: e.name, install_method: e.install_method };
   if (e.status === 'error' || e.status === 'unknown_source') {
     return { ...base, outcome: 'skipped', message: `not updated: status is ${e.status}`, restart_required: false };
@@ -109,6 +114,23 @@ async function updateOne(e: Entry, run: CommandRunner): Promise<UpdateResult> {
           : 'npm entries update manually',
         restart_required: false,
       };
+    case 'github-skill': {
+      if (!e.source_url || !e.source_path) {
+        return { ...base, outcome: 'skipped', message: 'no source recorded', restart_required: false };
+      }
+      const latest = await latestTag(repoOps, e.source_url);
+      if (!latest) return { ...base, outcome: 'failed', message: 'source repo has no version tags', restart_required: false };
+      const co = await repoOps.checkout(e.source_url, latest.tag);
+      if (!co) return { ...base, outcome: 'failed', message: 'could not fetch source at latest tag', restart_required: false };
+      try {
+        copyDirOver(join(co.dir, e.source_path), e.install_path);
+        setAdoptedVersion(e.name, e.project_path, latest.version);
+        return { ...base, outcome: 'updated', message: `updated to ${latest.version}`, restart_required: false };
+      } finally {
+        await co.cleanup();
+      }
+    }
+
     default:
       return { ...base, outcome: 'skipped', message: `${e.install_method} entries are not auto-updatable`, restart_required: false };
   }
