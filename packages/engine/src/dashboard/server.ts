@@ -21,25 +21,39 @@ export function startDashboard(opts: { port?: number; open?: boolean } = {}): Se
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const db = openDb();
     try {
-      if (url.pathname === '/api/status') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(getStatus(db, defaultDbPath())));
-      } else if (url.pathname === '/api/rescan' && req.method === 'POST') {
-        await scan(db);
-        await check(db);
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(getStatus(db, defaultDbPath())));
-      } else if (url.pathname === '/api/update' && req.method === 'POST') {
-        const body = await readJson(req);
-        const results = await update(db, { ids: Array.isArray(body.ids) ? body.ids : [] });
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(results));
-      } else if (url.pathname === '/') {
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(renderPage(getStatus(db, defaultDbPath()).entries));
-      } else {
-        res.writeHead(404, { 'content-type': 'text/plain' });
-        res.end('not found');
+      try {
+        if (url.pathname === '/api/status') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(getStatus(db, defaultDbPath())));
+        } else if (url.pathname === '/api/rescan' && req.method === 'POST') {
+          await scan(db);
+          await check(db);
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(getStatus(db, defaultDbPath())));
+        } else if (url.pathname === '/api/update' && req.method === 'POST') {
+          let body: { ids?: unknown };
+          try {
+            body = await readJson(req);
+          } catch {
+            res.writeHead(400, { 'content-type': 'application/json' });
+            res.end('{"error":"invalid json body"}');
+            return;
+          }
+          const results = await update(db, { ids: Array.isArray(body.ids) ? body.ids : [] });
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(results));
+        } else if (url.pathname === '/') {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+          res.end(renderPage(getStatus(db, defaultDbPath()).entries));
+        } else {
+          res.writeHead(404, { 'content-type': 'text/plain' });
+          res.end('not found');
+        }
+      } catch {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'text/plain' });
+          res.end('internal error');
+        }
       }
     } finally {
       db.close();

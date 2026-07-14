@@ -25,7 +25,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test \"dist/*.test.js\""
+    "test": "npm run build && node --test $(find dist -name '*.test.js')"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
