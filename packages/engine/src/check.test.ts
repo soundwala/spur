@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Entry } from './types.js';
+import type { RepoOps } from './repo.js';
 import { checkEntry } from './check.js';
 
 /** A marketplace plugin entry with the fields the check tiers read. */
@@ -86,6 +90,57 @@ test('git (non-marketplace) entries still decide staleness by commit', async () 
     catalogWith('superpowers', '6.1.1'), // version matches, but must be ignored for git
     false,
     undefined,
+  );
+  assert.equal(out.status, 'stale');
+});
+
+function fakeRepo(version: string, subpathContent: string): RepoOps {
+  const root = mkdtempSync(join(tmpdir(), 'spur-fake-'));
+  const sub = join(root, '.claude', 'skills', 'ui-ux-pro-max');
+  mkdirSync(sub, { recursive: true });
+  writeFileSync(join(sub, 'SKILL.md'), subpathContent);
+  return {
+    tags: async () => [{ tag: `v${version}`, version }],
+    checkout: async () => ({ dir: root, cleanup: async () => {} }),
+  };
+}
+
+function ghEntry(over: Partial<Entry> = {}): Entry {
+  return marketplaceEntry({
+    install_method: 'github-skill',
+    name: 'ui-ux-pro-max',
+    source_url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
+    source_path: '.claude/skills/ui-ux-pro-max',
+    installed_commit: null,
+    ...over,
+  });
+}
+
+test('github-skill: recorded version behind latest tag -> stale', async () => {
+  const ops = fakeRepo('2.11.0', 'anything');
+  const out = await checkEntry(ghEntry({ installed_version: '2.10.1' }), lsRemoteTo('x'), noCatalog, false, undefined, ops);
+  assert.equal(out.status, 'stale');
+  assert.equal(out.latest_version, '2.11.0');
+});
+
+test('github-skill: no recorded version, content matches latest -> fresh', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spur-inst-'));
+  writeFileSync(join(install, 'SKILL.md'), 'SAME');
+  const ops = fakeRepo('2.11.0', 'SAME');
+  const out = await checkEntry(
+    ghEntry({ installed_version: null, install_path: install }),
+    lsRemoteTo('x'), noCatalog, false, undefined, ops,
+  );
+  assert.equal(out.status, 'fresh');
+});
+
+test('github-skill: no recorded version, content differs -> stale', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spur-inst2-'));
+  writeFileSync(join(install, 'SKILL.md'), 'OLD');
+  const ops = fakeRepo('2.11.0', 'NEW');
+  const out = await checkEntry(
+    ghEntry({ installed_version: null, install_path: install }),
+    lsRemoteTo('x'), noCatalog, false, undefined, ops,
   );
   assert.equal(out.status, 'stale');
 });

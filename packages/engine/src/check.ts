@@ -1,8 +1,11 @@
+import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Entry, EntryStatus } from './types.js';
 import { allEntries, updateCheckResult } from './db.js';
 import { catalogVersionFor, versionOutcome } from './fallback.js';
 import { lsRemote } from './git.js';
+import type { RepoOps } from './repo.js';
+import { realRepoOps, latestTag, hashDir } from './repo.js';
 
 export interface CheckOptions {
   /** Lifts the GitHub API budget from 60/hr to 5000/hr; also used for private repos. */
@@ -25,7 +28,7 @@ export interface CheckResult {
  *   2. Enrichment (stale github.com rows only): compare API for behind_count.
  *   3. npm registry for SPUR's own self-entry.
  */
-export async function check(db: DatabaseSync, opts: CheckOptions = {}): Promise<CheckResult> {
+export async function check(db: DatabaseSync, opts: CheckOptions = {}, repoOps: RepoOps = realRepoOps): Promise<CheckResult> {
   const entries = allEntries(db);
   const token = opts.githubToken ?? process.env.GITHUB_TOKEN;
   // ls-remote results are shared across entries pointing at the same repo+ref.
@@ -53,7 +56,7 @@ export async function check(db: DatabaseSync, opts: CheckOptions = {}): Promise<
 
   const result: CheckResult = { checked: 0, stale: 0, errors: 0 };
   await pool(entries, opts.concurrency ?? 8, async (entry) => {
-    const outcome = await checkEntry(entry, cachedLsRemote, cachedCatalog, opts.enrich !== false, token);
+    const outcome = await checkEntry(entry, cachedLsRemote, cachedCatalog, opts.enrich !== false, token, repoOps);
     updateCheckResult(db, entry.id, outcome);
     result.checked++;
     if (outcome.status === 'stale') result.stale++;
@@ -73,6 +76,7 @@ export async function checkEntry(
   cachedCatalog: (repo: string) => Promise<unknown>,
   enrich: boolean,
   token: string | undefined,
+  repoOps: RepoOps = realRepoOps,
 ): Promise<CheckOutcome> {
   const base: CheckOutcome = {
     latest_commit: entry.latest_commit,
@@ -89,6 +93,10 @@ export async function checkEntry(
 
   if (entry.install_method === 'npm') {
     return checkNpm(entry, base);
+  }
+
+  if (entry.install_method === 'github-skill') {
+    return checkGithubSkill(entry, base, repoOps);
   }
 
   try {
@@ -115,6 +123,31 @@ export async function checkEntry(
       behind = await githubBehindCount(entry.source_url, entry.installed_commit, latest, token);
     }
     return { ...base, latest_commit: latest, behind_count: behind, status };
+  } catch (err) {
+    return fail(base, message(err));
+  }
+}
+
+async function checkGithubSkill(entry: Entry, base: CheckOutcome, repoOps: RepoOps): Promise<CheckOutcome> {
+  try {
+    const latest = await latestTag(repoOps, entry.source_url!);
+    if (!latest) return fail(base, 'source repo has no semver version tags');
+
+    if (entry.installed_version) {
+      const status = versionOutcome(entry.installed_version, latest.version) ?? 'stale';
+      return { ...base, latest_version: latest.version, status, behind_count: status === 'fresh' ? 0 : null };
+    }
+
+    const co = await repoOps.checkout(entry.source_url!, latest.tag);
+    if (!co) return fail(base, 'could not fetch source at latest tag');
+    try {
+      const upstream = hashDir(join(co.dir, entry.source_path ?? ''));
+      const installed = hashDir(entry.install_path);
+      const status = upstream && installed && upstream === installed ? 'fresh' : 'stale';
+      return { ...base, latest_version: latest.version, status, behind_count: status === 'fresh' ? 0 : null };
+    } finally {
+      await co.cleanup();
+    }
   } catch (err) {
     return fail(base, message(err));
   }
