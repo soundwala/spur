@@ -5,6 +5,7 @@ import { scan } from './scan.js';
 import { check } from './check.js';
 import { getStatus } from './status.js';
 import { update } from './update.js';
+import { startDashboard } from './dashboard/server.js';
 import { gitAvailable } from './git.js';
 
 const HELP = `spur — Skill & Plugin Update Radar
@@ -15,6 +16,7 @@ Usage:
   spur check        check known entries against upstream, print status
   spur status       print the last stored status without scanning or checking
   spur update [ids…]  update entries (all stale with --all, or by id)
+  spur dashboard      start the local dashboard and open it in your browser
 
 Options:
   --db <path>       index location (default: ~/.spur/index.db, or $SPUR_HOME)
@@ -40,6 +42,10 @@ async function main(): Promise<void> {
   }
 
   const command = positionals[0] ?? 'all';
+  if (command === 'dashboard') {
+    startDashboard({ open: true });
+    return; // server keeps the event loop alive
+  }
   const dbPath = values.db ?? defaultDbPath();
   const db = openDb(dbPath);
 

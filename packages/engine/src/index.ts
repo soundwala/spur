@@ -6,3 +6,4 @@ export { getStatus } from './status.js';
 export { selfItem, SELF_REPO_URL } from './self.js';
 export { gitAvailable } from './git.js';
 export { update, selectTargets, type UpdateResult, type CommandRunner } from './update.js';
+export { startDashboard } from './dashboard/server.js';

@@ -9,7 +9,7 @@
     "node": ">=22.5"
   },
   "scripts": {
-    "build": "npm run build -w @soundwala/spur && npm run build -w @soundwala/spur-dashboard",
+    "build": "npm run build -w @soundwala/spur",
     "test": "npm run test --workspaces --if-present"
   }
 }
