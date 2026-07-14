@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Entry } from '../types.js';
-import { renderPage } from './page.js';
+import { renderPage, groupEntries } from './page.js';
 
 function entry(over: Partial<Entry> = {}): Entry {
   return {
@@ -50,4 +50,49 @@ test('git checkouts with no versions still render commit shas', () => {
     entry({ install_method: 'git', installed_version: null, latest_version: null }),
   ]);
   assert.match(html, /ec86337 → f5633c1/);
+});
+
+test('groupEntries collapses same-named copies into one row with all ids', () => {
+  const rows = groupEntries(
+    [
+      entry({ id: 'a', project_path: '/p/one', status: 'unknown_source', install_method: 'unknown', installed_version: null, latest_version: null }),
+      entry({ id: 'b', project_path: '/p/two', status: 'unknown_source', install_method: 'unknown', installed_version: null, latest_version: null }),
+    ],
+    new Set(),
+  );
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0]!.ids.sort(), ['a', 'b']);
+  assert.equal(rows[0]!.locations.length, 2);
+  assert.equal(rows[0]!.zone, 'untraceable');
+});
+
+test('groupEntries marks a name as local when it is in the local set', () => {
+  const rows = groupEntries(
+    [entry({ status: 'unknown_source', install_method: 'unknown', name: 'mine', installed_version: null, latest_version: null })],
+    new Set(['mine']),
+  );
+  assert.equal(rows[0]!.zone, 'local');
+});
+
+test('github-skill stale rows are updatable and land in the behind zone', () => {
+  const rows = groupEntries(
+    [entry({ install_method: 'github-skill', status: 'stale', name: 'ui-ux-pro-max', installed_version: '2.10.1', latest_version: '2.11.0' })],
+    new Set(),
+  );
+  assert.equal(rows[0]!.zone, 'behind');
+  assert.equal(rows[0]!.updatable, true);
+});
+
+test('untraceable rows render Set source and Mark local actions; local rows are collapsed', () => {
+  const html = renderPage(
+    [
+      entry({ name: 'ui-ux-pro-max', status: 'unknown_source', install_method: 'unknown', installed_version: null, latest_version: null }),
+      entry({ name: 'my-authored', status: 'unknown_source', install_method: 'unknown', installed_version: null, latest_version: null }),
+    ],
+    { local: ['my-authored'] },
+  );
+  assert.match(html, /setSource\('ui-ux-pro-max'\)/);
+  assert.match(html, /markLocal\('ui-ux-pro-max'\)/);
+  assert.match(html, /Local \(1\)/);
+  assert.match(html, /Untraceable \(1\)/);
 });
