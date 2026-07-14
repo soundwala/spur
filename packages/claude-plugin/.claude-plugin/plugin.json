@@ -1,0 +1,9 @@
+{
+  "name": "spur",
+  "description": "SPUR — Skill & Plugin Update Radar. Ask in chat whether any of your installed skills/plugins are out of date vs their source repos.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Shanks",
+    "url": "https://github.com/soundwala"
+  }
+}
