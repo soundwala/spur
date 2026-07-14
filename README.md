@@ -28,7 +28,7 @@ Oh, and it's all local. The only thing that ever leaves your machine is a quiet 
 Same brain underneath — pick whichever fits how you work:
 
 - 💬 **Just ask.** With the Claude Code plugin, say *"are any of my skills out of date?"* and get a straight answer in plain English, plus an offer to fix it. No terminal needed — chat is the whole interface.
-- 📊 **Or glance at it.** A local dashboard lays every install out in a sortable table: what it is, which projects use it, installed vs. latest, and a freshness badge. One button to rescan.
+- 📊 **Or glance at it.** A local dashboard lays every install out in a sortable table: what it is, which projects use it, installed vs. latest, and a freshness badge — with checkboxes to update the stale ones (or "Update all stale" in one click). One button to rescan.
 
 ## Get started
 
@@ -102,8 +102,9 @@ node packages/engine/dist/cli.js         # scan + check + print
 
 ## Where it's headed
 
-- Actually *fixing* stale things for you — one click, or just say the word in chat.
-- A single `/plugin install` that stands up **both** surfaces, dashboard included.
+Fixing already works — the dashboard and `/spur-update` update stale installs for you. Still on the list:
+
+- Auto-starting the dashboard on install, so one `/plugin install` stands up **both** surfaces with nothing else to run.
 - Quiet background checks at session start, with real notifications.
 - Teaching it to recognize those `unknown_source` copies by matching them to known public skill repos.
 
