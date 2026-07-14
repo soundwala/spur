@@ -21,6 +21,8 @@ export interface Entry {
   project_path: string | null;
   source_url: string | null;
   source_ref: string | null;
+  /** In-repo subpath when the plugin lives inside its marketplace repo (e.g. plugins/frontend-design). */
+  source_path: string | null;
   installed_commit: string | null;
   installed_version: string | null;
   latest_commit: string | null;
@@ -30,6 +32,8 @@ export interface Entry {
   last_check_error: string | null;
   is_self: boolean;
   content_hash: string | null;
+  /** lastUpdated from installed_plugins.json — anchor for the commit-activity fallback. */
+  manifest_updated_at: string | null;
   first_seen_at: string | null;
   last_scanned_at: string | null;
   last_checked_at: string | null;
@@ -45,10 +49,12 @@ export interface ScannedItem {
   project_path?: string | null;
   source_url?: string | null;
   source_ref?: string | null;
+  source_path?: string | null;
   installed_commit?: string | null;
   installed_version?: string | null;
   is_self?: boolean;
   content_hash?: string | null;
+  manifest_updated_at?: string | null;
 }
 
 export interface StatusSummary {

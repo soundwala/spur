@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ScannedItem, Scope } from './types.js';
 import { resolveDir } from './resolve.js';
+import { realVersion, relSourcePath } from './fallback.js';
 import { selfItem } from './self.js';
 import { upsertEntries, pruneMissing } from './db.js';
 
@@ -73,6 +74,7 @@ function scanMarketplacePlugins(home: string): ScannedItem[] {
     for (const rec of installs as PluginInstallRecord[]) {
       if (!rec?.installPath) continue;
       const marketplace = marketplaceName ? marketplaces[marketplaceName] : undefined;
+      const source = resolvePluginSource(name, marketplace);
       items.push({
         name,
         type: 'plugin',
@@ -80,10 +82,14 @@ function scanMarketplacePlugins(home: string): ScannedItem[] {
         scope: rec.scope === 'project' ? 'project' : 'user',
         install_path: rec.installPath,
         project_path: null,
-        source_url: resolvePluginSourceUrl(name, marketplace),
+        source_url: source.url,
         source_ref: null,
+        source_path: source.path,
         installed_commit: rec.gitCommitSha ?? null,
-        installed_version: rec.version ?? null,
+        // records without a sha often carry the literal version "unknown";
+        // the installed copy's own plugin.json is the next-best witness
+        installed_version: realVersion(rec.version) ?? installedPluginJsonVersion(rec.installPath),
+        manifest_updated_at: rec.lastUpdated ?? null,
       });
     }
   }
@@ -95,6 +101,7 @@ interface PluginInstallRecord {
   installPath?: string;
   version?: string;
   gitCommitSha?: string;
+  lastUpdated?: string;
 }
 
 interface MarketplaceRecord {
@@ -110,27 +117,36 @@ function splitPluginKey(key: string): [string, string | null] {
 /**
  * The plugin's true source repo: the marketplace's own marketplace.json may
  * point at an external repo per plugin; a relative source means the plugin
- * lives inside the marketplace repo itself. Fall back to the marketplace repo.
+ * lives inside the marketplace repo itself (path returned so freshness can be
+ * checked against commits touching just that subtree). Falls back to the
+ * marketplace repo.
  */
-function resolvePluginSourceUrl(pluginName: string, marketplace?: MarketplaceRecord): string | null {
+function resolvePluginSource(
+  pluginName: string,
+  marketplace?: MarketplaceRecord,
+): { url: string | null; path: string | null } {
   const mpUrl = marketplaceRepoUrl(marketplace);
   const catalogPath = marketplace?.installLocation
     ? join(marketplace.installLocation, '.claude-plugin', 'marketplace.json')
     : null;
   const catalog = catalogPath ? readJson<{ plugins?: Array<{ name?: string; source?: unknown }> }>(catalogPath) : null;
-  const entry = catalog?.plugins?.find((p) => p.name === pluginName);
-  const src = entry?.source;
+  const src = catalog?.plugins?.find((p) => p.name === pluginName)?.source;
   if (typeof src === 'string') {
-    if (src.startsWith('.')) return mpUrl;
-    if (/^[\w.-]+\/[\w.-]+$/.test(src)) return `https://github.com/${src}`;
-    return mpUrl;
+    if (src.startsWith('.')) return { url: mpUrl, path: relSourcePath(src) };
+    if (/^[\w.-]+\/[\w.-]+$/.test(src)) return { url: `https://github.com/${src}`, path: null };
+    return { url: mpUrl, path: null };
   }
   if (src && typeof src === 'object') {
     const s = src as { source?: string; repo?: string; url?: string };
-    if (s.source === 'github' && s.repo) return `https://github.com/${s.repo}`;
-    if (s.url) return s.url;
+    if (s.source === 'github' && s.repo) return { url: `https://github.com/${s.repo}`, path: null };
+    if (s.url) return { url: s.url, path: null };
   }
-  return mpUrl;
+  return { url: mpUrl, path: null };
+}
+
+function installedPluginJsonVersion(installPath: string): string | null {
+  const pkg = readJson<{ version?: string }>(join(installPath, '.claude-plugin', 'plugin.json'));
+  return realVersion(pkg?.version);
 }
 
 function marketplaceRepoUrl(marketplace?: MarketplaceRecord): string | null {
