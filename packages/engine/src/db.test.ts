@@ -69,3 +69,9 @@ test('prune removes entries no longer on disk', () => {
   assert.equal(allEntries(db).length, 1);
   assert.equal(allEntries(db)[0]?.name, 'demo');
 });
+
+test('marketplace name round-trips through upsert', () => {
+  const db = tempDb();
+  upsertEntries(db, [item({ install_method: 'marketplace', marketplace: 'official' })]);
+  assert.equal(allEntries(db)[0]?.marketplace, 'official');
+});

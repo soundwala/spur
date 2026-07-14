@@ -23,6 +23,8 @@ export interface Entry {
   source_ref: string | null;
   /** In-repo subpath when the plugin lives inside its marketplace repo (e.g. plugins/frontend-design). */
   source_path: string | null;
+  /** Marketplace name for marketplace installs (the "@marketplace" half of the manifest key). */
+  marketplace: string | null;
   installed_commit: string | null;
   installed_version: string | null;
   latest_commit: string | null;
@@ -50,6 +52,7 @@ export interface ScannedItem {
   source_url?: string | null;
   source_ref?: string | null;
   source_path?: string | null;
+  marketplace?: string | null;
   installed_commit?: string | null;
   installed_version?: string | null;
   is_self?: boolean;
