@@ -92,3 +92,15 @@ test('a failing command yields failed without throwing', async () => {
   assert.equal(r?.outcome, 'failed');
   assert.match(r!.message, /boom/);
 });
+
+test('a throwing runner yields failed and does not abort the batch', async () => {
+  const db = tempDb();
+  upsertEntries(db, [mkt({ name: 'a', install_path: '/c/a' }), mkt({ name: 'b', install_path: '/c/b' })]);
+  db.prepare("UPDATE entries SET status='stale'").run();
+  let n = 0;
+  const run: CommandRunner = async () => { n++; if (n === 1) throw new Error('kaboom'); return { ok: true, stdout: '', stderr: '' }; };
+  const res = await update(db, { all: true }, run);
+  assert.equal(res.length, 2);
+  assert.equal(res.filter((r) => r.outcome === 'failed').length, 1);
+  assert.ok(res.find((r) => r.outcome === 'failed')?.message.includes('kaboom'));
+});

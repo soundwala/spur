@@ -61,8 +61,10 @@ export function startDashboard(opts: { port?: number; open?: boolean } = {}): Se
   });
   server.listen(port, '127.0.0.1', () => {
     const url = `http://localhost:${port}`;
-    process.stdout.write(`SPUR dashboard: ${url}\n`);
-    if (opts.open) openBrowser(url);
+    if (opts.open) {
+      process.stdout.write(`SPUR dashboard: ${url}\n`);
+      openBrowser(url);
+    }
   });
   return server;
 }

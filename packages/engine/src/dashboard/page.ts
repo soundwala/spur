@@ -101,7 +101,21 @@ export function renderPage(entries: Entry[]): string {
   function sync(){ const n = selected().length; document.getElementById('count').textContent = n; const s=document.getElementById('sel'); s.disabled=!n; s.textContent = n?('Update selected ('+n+')'):'Update selected'; }
   document.getElementById('all').onchange = e => { boxes().forEach(b => b.checked = e.target.checked); sync(); };
   boxes().forEach(b => b.onchange = sync);
-  async function run(ids){ if(!ids.length) return; const r = await fetch('/api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids})}); const res = await r.json(); const upd = res.filter(x=>x.outcome==='updated').length; const d=document.getElementById('done'); d.style.display='block'; d.textContent = 'Updated '+upd+' · restart Claude Code to apply.'; }
+  async function run(ids){
+    if(!ids.length) return;
+    const r = await fetch('/api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids})});
+    const res = await r.json();
+    const updated = res.filter(x=>x.outcome==='updated').length;
+    const failed = res.filter(x=>x.outcome==='failed').length;
+    const skipped = res.filter(x=>x.outcome==='skipped').length;
+    const d = document.getElementById('done');
+    d.style.display='block';
+    let msg = 'Updated '+updated;
+    if(failed) msg += ' · '+failed+' failed';
+    if(skipped) msg += ' · '+skipped+' skipped';
+    msg += updated ? ' · restart Claude Code to apply, then Rescan.' : '.';
+    d.textContent = msg;
+  }
   async function rescan(btn){ btn.disabled=true; btn.textContent='Scanning…'; await fetch('/api/rescan',{method:'POST'}); location.reload(); }
   sync();
 </script>`;

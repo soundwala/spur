@@ -48,7 +48,19 @@ export async function update(
   const targets = selectTargets(allEntries(db), opts);
   const results: UpdateResult[] = [];
   for (const entry of targets) {
-    const result = await updateOne(entry, run);
+    let result: UpdateResult;
+    try {
+      result = await updateOne(entry, run);
+    } catch (err) {
+      result = {
+        id: entry.id,
+        name: entry.name,
+        install_method: entry.install_method,
+        outcome: 'failed',
+        message: err instanceof Error ? err.message : String(err),
+        restart_required: false,
+      };
+    }
     results.push(result);
     if (result.outcome === 'updated') {
       // The installed sha/version only changes after a restart, so don't fake fresh —
