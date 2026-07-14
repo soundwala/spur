@@ -8,6 +8,7 @@ import { resolveDir } from './resolve.js';
 import { realVersion, relSourcePath } from './fallback.js';
 import { selfItem } from './self.js';
 import { upsertEntries, pruneMissing } from './db.js';
+import { resolveSource } from './sources.js';
 
 export interface ScanOptions {
   /** Override for tests; defaults to the real home directory. */
@@ -49,6 +50,18 @@ export async function scan(db: DatabaseSync, opts: ScanOptions = {}): Promise<Sc
   // manifest location); last write wins is fine, but dedupe keeps counts honest.
   const byPath = new Map(items.map((it) => [it.install_path, it]));
   const deduped = [...byPath.values()];
+
+  // Re-label loose skills whose name is covered by a recorded source.
+  for (const item of deduped) {
+    if (item.type !== 'skill' || item.install_method !== 'unknown') continue;
+    const hit = resolveSource(item.name, item.project_path ?? null);
+    if (!hit) continue;
+    item.install_method = 'github-skill';
+    item.source_url = hit.source.repo;
+    item.source_ref = hit.source.ref;
+    item.source_path = hit.subpath;
+    item.installed_version = hit.source.adopted_version ?? item.installed_version ?? null;
+  }
 
   upsertEntries(db, deduped);
   const removed = pruneMissing(db, deduped.map((it) => it.install_path));
