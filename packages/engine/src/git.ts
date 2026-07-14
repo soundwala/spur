@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
 
 const exec = promisify(execFile);
 
@@ -41,4 +42,23 @@ export async function lsRemote(url: string, ref = 'HEAD'): Promise<string | null
   if (!out) return null;
   const sha = out.split('\n')[0]?.split('\t')[0]?.trim();
   return sha && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+}
+
+/** Tag short-names for a remote (deref suffixes and refs/tags/ stripped, deduped). */
+export async function gitLsRemoteTags(url: string): Promise<string[]> {
+  const out = await git(['ls-remote', '--tags', url], 30_000);
+  if (!out) return [];
+  const names = new Set<string>();
+  for (const line of out.split('\n')) {
+    const ref = line.split('\t')[1];
+    const name = ref?.replace('refs/tags/', '').replace(/\^\{\}$/, '');
+    if (name) names.add(name);
+  }
+  return [...names];
+}
+
+/** Shallow-clone a single ref into dest. Success is confirmed by the checkout existing. */
+export async function gitCloneShallow(url: string, ref: string, dest: string): Promise<boolean> {
+  await git(['clone', '--depth', '1', '--branch', ref, url, dest], 60_000);
+  return existsSync(dest) && existsSync(`${dest}/.git`);
 }
