@@ -28,7 +28,7 @@ Oh, and it's all local. The only thing that ever leaves your machine is a quiet 
 Same brain underneath — pick whichever fits how you work:
 
 - 💬 **Just ask.** With the Claude Code plugin, say *"are any of my skills out of date?"* and get a straight answer in plain English, plus an offer to fix it. No terminal needed — chat is the whole interface.
-- 📊 **Or glance at it.** A local dashboard lays every install out in a sortable table: what it is, which projects use it, installed vs. latest, and a freshness badge — with checkboxes to update the stale ones (or "Update all stale" in one click). One button to rescan.
+- 📊 **Or glance at it.** A local dashboard lays every install out in a sortable table: what it is, which projects use it, installed vs. latest, and a freshness badge — with checkboxes to update the stale ones (or "Update all behind" in one click). Copies of the same skill collapse into one row, source-less skills tuck into a collapsed section with a **Set source…** action to adopt them (or **Mark local** to hush the ones that are yours), and one button rescans.
 
 ## Get started
 
@@ -46,7 +46,12 @@ spur scan      # just rescan what's installed (no network)
 spur check     # just re-check against upstream
 spur status    # show the last report, instantly
 spur dashboard # start the local dashboard and open it in your browser
+
+spur adopt <repo-url>            # teach SPUR where a hand-installed skill came from
+spur add <repo-url> --skill <n>  # install a skill straight from a GitHub repo (or --all)
 ```
+
+Copied a skill out of a GitHub repo by hand? It lands as `unknown_source` because the copy carries no trace of where it came from. Point SPUR at the repo once with `spur adopt` (it matches every copy across your projects in one go, even a whole monorepo of skills) and from then on SPUR checks it against the repo's latest release tag — and can update it for you, something Claude Code can't do for a source-less skill. `spur add` installs from a repo and records that provenance up front.
 
 Here's the kind of thing it hands back — worst offenders first, one row per installed copy:
 
@@ -71,6 +76,7 @@ SPUR is deliberately cheap first, thorough only where it counts:
 |---|---|
 | 🏪 **Marketplace plugin** | Compares the installed version against the marketplace's published version — the signal Claude Code actually updates on. No version to compare? Falls back to the recorded commit, then to "did anything change in this plugin's folder?" |
 | 🌿 **Git checkout** | Your local `HEAD` vs. what the remote has now. |
+| 🧩 **Adopted GitHub skill** | Once you've run `spur adopt`, its installed version vs. the repo's latest release tag — or, if there's no version recorded, whether your copy's files still match that tag. |
 | 📦 **Installer-CLI skill** | The source and version the installer wrote down. |
 | 🛰️ **SPUR itself** | Installed version vs. the npm registry. |
 | ❓ **A mystery copy-paste** | Marked `unknown_source` and left alone — SPUR won't make up a status it can't prove. |

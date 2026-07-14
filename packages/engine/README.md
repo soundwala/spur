@@ -17,11 +17,15 @@ spur check        # check known entries against upstream
 spur status       # print the last stored status, no scan/check
 spur update [ids] # update stale entries (all stale with --all, or by id)
 spur dashboard    # start the local dashboard and open it in your browser
+spur adopt <repo> # record a GitHub repo as the source for matching installed skills
+spur add <repo>   # install skill(s) from a GitHub repo (--skill <name>… or --all)
 ```
 
-Options: `--db <path>` (default `~/.spur/index.db`), `--no-enrich` (skip GitHub compare-API behind-counts), `--all` (update every stale entry), `--compact`.
+Options: `--db <path>` (default `~/.spur/index.db`), `--no-enrich` (skip GitHub compare-API behind-counts), `--all` (update every stale entry, or install every skill a repo ships), `--skill <name>` (repeatable, for `add`), `--scope user|project`, `--project <path>` (write provenance to `<path>/.spur.json`), `--compact`.
 
-`spur update` runs the real fix per install method — `claude plugin update` for marketplace plugins, `git pull --ff-only` for checkouts — and leaves untraceable copies alone. Marketplace updates need a Claude Code restart to take effect.
+`spur update` runs the real fix per install method — `claude plugin update` for marketplace plugins, `git pull --ff-only` for checkouts, and for adopted GitHub skills SPUR re-fetches the skill's subtree at the repo's latest release tag and overwrites the files in place (no restart needed). It leaves untraceable copies alone. Marketplace updates need a Claude Code restart to take effect.
+
+`spur adopt <repo>` matches the skills a repo ships against your source-less installs by name and records the mapping (globally, or in `<path>/.spur.json` with `--project`), so a single adopt can cover a whole monorepo of skills copied across several projects.
 
 ## Programmatic
 
@@ -41,8 +45,9 @@ startDashboard({ open: true });  // serve the review-and-fix UI on http://localh
 
 1. Marketplace plugins → installed version vs the marketplace's published version (what `claude plugin update` acts on); if there's no version to compare, fall back to `gitCommitSha` vs upstream HEAD (`git ls-remote`), then commit-activity in the plugin's subtree.
 2. Git checkouts → local HEAD vs upstream.
-3. Installer-CLI manifests → recorded source/version.
-4. SPUR itself → installed version vs the npm registry.
-5. Anything else → an honest `unknown_source` badge.
+3. Adopted GitHub skills → recorded version vs the repo's latest release tag; with no recorded version, a content hash of the installed files vs that tag's subtree.
+4. Installer-CLI manifests → recorded source/version.
+5. SPUR itself → installed version vs the npm registry.
+6. Anything else → an honest `unknown_source` badge.
 
 Requires Node ≥ 22.5 (uses the built-in `node:sqlite`). MIT licensed.

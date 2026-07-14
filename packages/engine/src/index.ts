@@ -6,4 +6,9 @@ export { getStatus } from './status.js';
 export { selfItem, SELF_REPO_URL } from './self.js';
 export { gitAvailable } from './git.js';
 export { update, selectTargets, type UpdateResult, type CommandRunner } from './update.js';
+export { adopt, install, type AdoptResult, type InstallResult } from './adopt.js';
+export {
+  loadStore, saveStore, resolveSource, isLocal, markLocal, upsertSource, setAdoptedVersion,
+} from './sources.js';
+export { realRepoOps, latestTag, type RepoOps, type TagInfo } from './repo.js';
 export { startDashboard } from './dashboard/server.js';
