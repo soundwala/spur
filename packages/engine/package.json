@@ -1,6 +1,6 @@
 {
   "name": "@soundwala/spur",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "SPUR — Skill & Plugin Update Radar. Scans every Claude Code skill/plugin install method and reports which are out of date vs their source repos. Local-only; zero runtime dependencies.",
   "license": "MIT",
   "repository": {

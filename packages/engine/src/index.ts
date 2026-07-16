@@ -9,7 +9,9 @@ export { update, selectTargets, type UpdateResult, type CommandRunner } from './
 export { adopt, install, type AdoptResult, type InstallResult } from './adopt.js';
 export {
   loadStore, saveStore, resolveSource, isLocal, markLocal, upsertSource, setAdoptedVersion,
+  setIgnore, clearIgnore, ignoreValueFor,
 } from './sources.js';
 export { realRepoOps, latestTag, type RepoOps, type TagInfo } from './repo.js';
 export { startDashboard } from './dashboard/server.js';
 export { createBackup, listBackups, restoreBackup, type BackupInfo } from './backup.js';
+export { frontmatterVersion, skillDirVersion } from './fallback.js';
