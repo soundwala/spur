@@ -115,3 +115,31 @@ test('checkout of HEAD works (repos with no usable tags)', async () => {
   assert.ok(co && existsSync(join(co!.dir, 'f.txt')));
   await co!.cleanup();
 });
+
+test('sparse checkout fetches only the named subtree, not the whole repo', async () => {
+  const origin = mkdtempSync(join(tmpdir(), 'spur-sparse-'));
+  const run = (args: string[]) => execFileSync('git', args, { cwd: origin, stdio: 'ignore' });
+  run(['init', '-q']); run(['config', 'user.email', 't@t']); run(['config', 'user.name', 't']);
+  // a big-ish file at the repo root that we must NOT fetch, plus a small skill subtree
+  writeFileSync(join(origin, 'HEAVY.bin'), 'x'.repeat(200_000));
+  mkdirSync(join(origin, '.claude', 'skills', 'imp'), { recursive: true });
+  writeFileSync(join(origin, '.claude', 'skills', 'imp', 'SKILL.md'), '---\nname: imp\n---\nbody\n');
+  run(['add', '-A']); run(['commit', '-qm', 'c']);
+
+  const co = await realRepoOps.checkout(origin, 'HEAD', ['.claude/skills/imp']);
+  assert.ok(co, 'sparse checkout succeeded');
+  assert.ok(existsSync(join(co!.dir, '.claude', 'skills', 'imp', 'SKILL.md')), 'skill subtree present');
+  assert.equal(existsSync(join(co!.dir, 'HEAVY.bin')), false, 'root heavy file excluded by sparse checkout');
+  await co!.cleanup();
+});
+
+test('checkout without sparsePaths still fetches the whole repo (back-compat)', async () => {
+  const origin = mkdtempSync(join(tmpdir(), 'spur-full-'));
+  const run = (args: string[]) => execFileSync('git', args, { cwd: origin, stdio: 'ignore' });
+  run(['init', '-q']); run(['config', 'user.email', 't@t']); run(['config', 'user.name', 't']);
+  writeFileSync(join(origin, 'root.txt'), 'here');
+  run(['add', '-A']); run(['commit', '-qm', 'c']);
+  const co = await realRepoOps.checkout(origin, 'HEAD');
+  assert.ok(co && existsSync(join(co!.dir, 'root.txt')));
+  await co!.cleanup();
+});

@@ -26,7 +26,7 @@ export async function adopt(
 ): Promise<AdoptResult> {
   const tags = await repoOps.tags(repo);       // [] is fine — fall back to HEAD
   const best = tags[0] ?? null;
-  const co = await repoOps.checkout(repo, best?.tag ?? 'HEAD');
+  const co = await repoOps.checkout(repo, best?.tag ?? 'HEAD', ['.claude/skills']);
   if (!co) throw new Error('could not fetch source repo');
   try {
     const repoSkills = discoverSkills(co.dir);
@@ -61,7 +61,7 @@ export async function adopt(
     // Bounded walk over older tags to identify (and pristine) copies that didn't match the latest.
     for (const t of tags.slice(1, MAX_TAG_WALK)) {
       if (unmatched.length === 0) break;
-      const older = await repoOps.checkout(repo, t.tag);
+      const older = await repoOps.checkout(repo, t.tag, ['.claude/skills']);
       if (!older) continue;
       try {
         for (let i = unmatched.length - 1; i >= 0; i--) {
@@ -100,7 +100,7 @@ export async function install(
 ): Promise<InstallResult> {
   const tags = await repoOps.tags(repo);
   const best = tags[0] ?? null;
-  const co = await repoOps.checkout(repo, best?.tag ?? 'HEAD');
+  const co = await repoOps.checkout(repo, best?.tag ?? 'HEAD', ['.claude/skills']);
   if (!co) throw new Error('could not fetch source repo');
   try {
     const repoSkills = discoverSkills(co.dir);

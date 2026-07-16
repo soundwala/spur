@@ -153,7 +153,7 @@ export async function updateOne(
       try {
         const tags = await repoOps.tags(e.source_url);
         const best = tags[0] ?? null;
-        const co = await repoOps.checkout(e.source_url, best?.tag ?? 'HEAD');
+        const co = await repoOps.checkout(e.source_url, best?.tag ?? 'HEAD', [e.source_path]);
         if (!co) return { ...base, outcome: 'failed', message: 'could not fetch source repo', restart_required: false };
         try {
           const subtree = join(co.dir, e.source_path);

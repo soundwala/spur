@@ -63,3 +63,17 @@ export async function gitCloneShallow(url: string, ref: string, dest: string): P
   await git(['clone', '--depth', '1', ...branch, url, dest], 60_000);
   return existsSync(dest) && existsSync(`${dest}/.git`);
 }
+
+/**
+ * Partial + sparse clone: fetch only the given paths' trees/blobs. Much cheaper
+ * than a full clone for a small skill living in a large repo. 'HEAD' = default branch.
+ */
+export async function gitSparseClone(url: string, ref: string, dest: string, paths: string[]): Promise<boolean> {
+  const branch = ref === 'HEAD' ? [] : ['--branch', ref];
+  await git(['clone', '--depth', '1', '--filter=blob:none', '--sparse', ...branch, url, dest], 120_000);
+  if (!existsSync(`${dest}/.git`)) return false;
+  // --no-cone: cone mode always includes top-level files at the repo root by
+  // design, which would defeat the purpose of excluding a large root file.
+  await git(['-C', dest, 'sparse-checkout', 'set', '--no-cone', ...paths]);
+  return existsSync(dest);
+}

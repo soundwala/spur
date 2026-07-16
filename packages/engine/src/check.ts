@@ -154,7 +154,7 @@ async function checkGithubSkill(entry: Entry, base: CheckOutcome, repoOps: RepoO
     if (entry.installed_version && best) return byVersion(entry.installed_version, best.version);
 
     // 3. Checkout bestRef (or default branch) for frontmatter / content evidence.
-    const co = await repoOps.checkout(entry.source_url!, best?.tag ?? 'HEAD');
+    const co = await repoOps.checkout(entry.source_url!, best?.tag ?? 'HEAD', entry.source_path ? [entry.source_path] : undefined);
     if (!co) return fail(base, 'could not fetch source repo');
     try {
       const subtree = join(co.dir, entry.source_path ?? '');

@@ -2,7 +2,7 @@ import { readdirSync, existsSync, statSync, readFileSync, mkdirSync, rmSync, cpS
 import { join, sep, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { gitLsRemoteTags, gitCloneShallow } from './git.js';
+import { gitLsRemoteTags, gitCloneShallow, gitSparseClone } from './git.js';
 
 export interface TagInfo {
   tag: string;
@@ -16,7 +16,7 @@ export interface RepoCheckout {
 
 export interface RepoOps {
   tags(repo: string): Promise<TagInfo[]>;                          // newest first
-  checkout(repo: string, ref: string): Promise<RepoCheckout | null>;
+  checkout(repo: string, ref: string, sparsePaths?: string[]): Promise<RepoCheckout | null>;
 }
 
 /** "v2.11.0" / "2.11.0" -> TagInfo; anything without an x.y.z core -> null. */
@@ -42,9 +42,11 @@ export const realRepoOps: RepoOps = {
       .filter((t): t is TagInfo => t !== null);
     return parsed.sort((a, b) => compareVersions(b.version, a.version));
   },
-  async checkout(repo: string, ref: string): Promise<RepoCheckout | null> {
+  async checkout(repo: string, ref: string, sparsePaths?: string[]): Promise<RepoCheckout | null> {
     const dir = mkdtempSync(join(tmpdir(), 'spur-co-'));
-    const ok = await gitCloneShallow(repo, ref, join(dir, 'repo'));
+    const ok = sparsePaths?.length
+      ? await gitSparseClone(repo, ref, join(dir, 'repo'), sparsePaths)
+      : await gitCloneShallow(repo, ref, join(dir, 'repo'));
     if (!ok) {
       rmSync(dir, { recursive: true, force: true });
       return null;
