@@ -30,6 +30,7 @@ Options:
   --scope <s>       (add) user | project (default: user)
   --project <path>  write provenance to <path>/.spur.json instead of the global store
   --to <path>       (restore) restore to a different location
+  --force           (update) overwrite modified/unverified copies (backs up first); only applies when targeting ids explicitly, not with --all
   -h, --help        show this help
 `;
 
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
       scope: { type: 'string' },
       project: { type: 'string' },
       to: { type: 'string' },
+      force: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -111,7 +113,7 @@ async function main(): Promise<void> {
     }
     if (command === 'update') {
       const ids = positionals.slice(1);
-      const results = await update(db, { ids: ids.length ? ids : undefined, all: values.all });
+      const results = await update(db, { ids: ids.length ? ids : undefined, all: values.all, force: values.force });
       process.stdout.write(JSON.stringify(results, null, values.compact ? 0 : 2) + '\n');
       return;
     }

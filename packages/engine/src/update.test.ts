@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb, upsertEntries, allEntries } from './db.js';
@@ -130,4 +130,70 @@ test('github-skill update re-fetches the subpath and overwrites files', async ()
   assert.equal(result.outcome, 'updated');
   assert.equal(result.restart_required, false);
   assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'NEW');
+});
+
+function ghFixture() {
+  process.env.SPUR_HOME = mkdtempSync(join(tmpdir(), 'spur-store-'));
+  const install = mkdtempSync(join(tmpdir(), 'spur-inst-'));
+  writeFileSync(join(install, 'SKILL.md'), 'MY EDITS');
+  const repoDir = mkdtempSync(join(tmpdir(), 'spur-up-'));
+  const sub = join(repoDir, '.claude', 'skills', 'ui-ux-pro-max');
+  mkdirSync(sub, { recursive: true });
+  writeFileSync(join(sub, 'SKILL.md'), 'NEW');
+  const repoOps: RepoOps = {
+    tags: async () => [{ tag: 'v2.12.0', version: '2.12.0' }],
+    checkout: async () => ({ dir: repoDir, cleanup: async () => {} }),
+  };
+  const entry = (status: string) => ({
+    id: 'x', name: 'ui-ux-pro-max', install_method: 'github-skill', scope: 'user',
+    status, install_path: install, source_url: 'https://github.com/x/y',
+    source_path: '.claude/skills/ui-ux-pro-max', project_path: null,
+    installed_version: '2.11.0', pristine_manifest: JSON.stringify(['SKILL.md']),
+  }) as unknown as Entry;
+  return { install, entry, repoOps };
+}
+const okRun: CommandRunner = async () => ({ ok: true, stdout: '', stderr: '' });
+
+test('modified is refused without --force; files untouched', async () => {
+  const { install, entry, repoOps } = ghFixture();
+  const r = await updateOne(entry('modified'), okRun, repoOps);
+  assert.equal(r.outcome, 'skipped');
+  assert.match(r.message, /--force/);
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'MY EDITS');
+});
+
+test('--force backs up BEFORE overwriting and reports the backup id', async () => {
+  const { install, entry, repoOps } = ghFixture();
+  const r = await updateOne(entry('modified'), okRun, repoOps, { force: true });
+  assert.equal(r.outcome, 'updated');
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'NEW');
+  const { listBackups } = await import('./backup.js');
+  const backup = listBackups()[0]!;
+  assert.match(r.message, new RegExp(backup.id));
+  const { readFileSync: rf } = await import('node:fs');
+  const { join: j } = await import('node:path');
+  const { spurHome } = await import('./db.js');
+  assert.equal(rf(j(spurHome(), 'backups', backup.id, 'files', 'SKILL.md'), 'utf8'), 'MY EDITS');
+  assert.ok(r.applied?.pristine_hash);
+});
+
+test('backup failure aborts the update; files untouched', async () => {
+  const { install, entry, repoOps } = ghFixture();
+  writeFileSync(join(process.env.SPUR_HOME!, 'backups'), 'not a dir'); // mkdir under a FILE will throw
+  const r = await updateOne(entry('modified'), okRun, repoOps, { force: true });
+  assert.equal(r.outcome, 'failed');
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'MY EDITS');
+});
+
+test('stale update: no backup, prunes upstream-deleted files, keeps user files', async () => {
+  const { install, entry, repoOps } = ghFixture();
+  writeFileSync(join(install, 'old-upstream.txt'), 'shipped once'); // in old manifest below
+  writeFileSync(join(install, 'notes.mine'), 'user file');
+  const e = { ...(entry('stale') as any), pristine_manifest: JSON.stringify(['SKILL.md', 'old-upstream.txt']) };
+  const r = await updateOne(e, okRun, repoOps);
+  assert.equal(r.outcome, 'updated');
+  assert.equal(existsSync(join(install, 'old-upstream.txt')), false); // pruned (upstream-owned)
+  assert.equal(readFileSync(join(install, 'notes.mine'), 'utf8'), 'user file'); // untouched
+  const { listBackups } = await import('./backup.js');
+  assert.equal(listBackups().length, 0); // nothing to lose → no backup
 });
