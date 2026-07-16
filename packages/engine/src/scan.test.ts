@@ -96,3 +96,24 @@ test('scan reads frontmatter version into installed_version', async () => {
   const { items } = await scan(db, { home, discoverProjects: false });
   assert.equal(items.find((i) => i.name === 'impeccable')?.installed_version, '3.9.1');
 });
+
+test('scan frontmatter version wins over source adopted_version', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'spur-home-'));
+  process.env.SPUR_HOME = mkdtempSync(join(tmpdir(), 'spur-store-'));
+  const skill = join(home, '.claude', 'skills', 'conflict-skill');
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(join(skill, 'SKILL.md'), '---\nname: conflict-skill\nversion: 9.9.9\n---\nbody\n');
+  upsertSource({
+    repo: 'https://github.com/test/conflict-skill',
+    ref: null,
+    version_source: 'tag',
+    skills: { 'conflict-skill': '.claude/skills/conflict-skill' },
+    adopted_version: '2.11.0',
+  });
+
+  const db = openDb(join(home, 'index.db'));
+  const { items } = await scan(db, { home, discoverProjects: false });
+  const skillItem = items.find((i) => i.name === 'conflict-skill');
+  assert.equal(skillItem?.install_method, 'github-skill');
+  assert.equal(skillItem?.installed_version, '9.9.9');
+});
