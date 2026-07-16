@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseTag, compareVersions, discoverSkills, hashDir, copyDirOver, realRepoOps, latestTag } from './repo.js';
+import { parseTag, compareVersions, discoverSkills, hashDir, copyDirOver, realRepoOps, latestTag, listShippedFiles, hashManifest, copyFiles } from './repo.js';
 
 test('parseTag extracts semver from v-prefixed and bare tags', () => {
   assert.deepEqual(parseTag('v2.11.0'), { tag: 'v2.11.0', version: '2.11.0' });
@@ -62,5 +62,56 @@ test('realRepoOps.tags + checkout against a local git fixture', async () => {
   const co = await realRepoOps.checkout(origin, 'v1.0.0');
   assert.ok(co && existsSync(join(co!.dir, '.claude', 'skills', 'design', 'SKILL.md')));
   assert.match(readFileSync(join(co!.dir, '.claude/skills/design/SKILL.md'), 'utf8'), /v1/);
+  await co!.cleanup();
+});
+
+test('listShippedFiles excludes runtime droppings, sorted posix paths', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'spur-ls-'));
+  mkdirSync(join(dir, 'scripts', '__pycache__'), { recursive: true });
+  writeFileSync(join(dir, 'SKILL.md'), 'x');
+  writeFileSync(join(dir, 'scripts', 'a.py'), 'x');
+  writeFileSync(join(dir, 'scripts', 'a.pyc'), 'x');
+  writeFileSync(join(dir, 'scripts', '__pycache__', 'a.cpython-312.pyc'), 'x');
+  writeFileSync(join(dir, '.DS_Store'), 'x');
+  assert.deepEqual(listShippedFiles(dir), ['SKILL.md', 'scripts/a.py']);
+  assert.deepEqual(listShippedFiles(join(dir, 'nope')), []);
+});
+
+test('hashManifest: extra files ignored, edits and deletions detected', () => {
+  const a = mkdtempSync(join(tmpdir(), 'spur-hm-'));
+  writeFileSync(join(a, 'SKILL.md'), 'body');
+  const manifest = ['SKILL.md'];
+  const clean = hashManifest(a, manifest);
+  writeFileSync(join(a, 'notes.txt'), 'mine');              // user-added → ignored
+  assert.equal(hashManifest(a, manifest), clean);
+  writeFileSync(join(a, 'SKILL.md'), 'edited');             // edit → detected
+  assert.notEqual(hashManifest(a, manifest), clean);
+  rmSync(join(a, 'SKILL.md'));                              // deletion → detected
+  assert.notEqual(hashManifest(a, manifest), clean);
+});
+
+test('copyFiles copies exactly the manifest, creating subdirs', () => {
+  const src = mkdtempSync(join(tmpdir(), 'spur-cf-'));
+  const dst = mkdtempSync(join(tmpdir(), 'spur-cfd-'));
+  mkdirSync(join(src, 'data'), { recursive: true });
+  writeFileSync(join(src, 'SKILL.md'), 'new');
+  writeFileSync(join(src, 'data', 'x.csv'), 'rows');
+  writeFileSync(join(src, 'ignore-me.txt'), 'no');
+  writeFileSync(join(dst, 'mine.txt'), 'keep');
+  copyFiles(src, dst, ['SKILL.md', 'data/x.csv']);
+  assert.equal(readFileSync(join(dst, 'SKILL.md'), 'utf8'), 'new');
+  assert.equal(readFileSync(join(dst, 'data', 'x.csv'), 'utf8'), 'rows');
+  assert.equal(readFileSync(join(dst, 'mine.txt'), 'utf8'), 'keep'); // untouched
+  assert.equal(existsSync(join(dst, 'ignore-me.txt')), false);
+});
+
+test('checkout of HEAD works (repos with no usable tags)', async () => {
+  const origin = mkdtempSync(join(tmpdir(), 'spur-head-'));
+  const run = (args: string[]) => execFileSync('git', args, { cwd: origin, stdio: 'ignore' });
+  run(['init', '-q']); run(['config', 'user.email', 't@t']); run(['config', 'user.name', 't']);
+  writeFileSync(join(origin, 'f.txt'), 'x');
+  run(['add', '-A']); run(['commit', '-qm', 'c']);
+  const co = await realRepoOps.checkout(origin, 'HEAD');
+  assert.ok(co && existsSync(join(co!.dir, 'f.txt')));
   await co!.cleanup();
 });

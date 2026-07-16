@@ -1,5 +1,5 @@
-import { readdirSync, existsSync, statSync, readFileSync, mkdirSync, rmSync, cpSync, mkdtempSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { readdirSync, existsSync, statSync, readFileSync, mkdirSync, rmSync, cpSync, mkdtempSync, copyFileSync } from 'node:fs';
+import { join, sep, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { gitLsRemoteTags, gitCloneShallow } from './git.js';
@@ -116,4 +116,42 @@ function walk(dir: string, prefix = ''): string[] {
 export function copyDirOver(srcDir: string, destDir: string): void {
   mkdirSync(destDir, { recursive: true });
   cpSync(srcDir, destDir, { recursive: true, force: true });
+}
+
+const IGNORED_DIRS = new Set(['.git', '__pycache__']);
+const IGNORED_FILES = new Set(['.DS_Store']);
+
+/** Sorted upstream-shipped files under dir: excludes runtime droppings. */
+export function listShippedFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return walk(dir)
+    .filter((rel) => {
+      const parts = rel.split('/');
+      if (parts.some((p) => IGNORED_DIRS.has(p))) return false;
+      const base = parts[parts.length - 1]!;
+      return !IGNORED_FILES.has(base) && !base.endsWith('.pyc');
+    })
+    .sort();
+}
+
+/** Hash exactly the given relative paths (sorted); missing files hash as a marker. */
+export function hashManifest(dir: string, files: string[]): string {
+  const hash = createHash('sha256');
+  for (const rel of [...files].sort()) {
+    hash.update(rel);
+    hash.update('\0');
+    const abs = join(dir, rel);
+    hash.update(existsSync(abs) ? readFileSync(abs) : '<missing>');
+    hash.update('\0');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+/** Copy exactly the manifest files from srcDir to destDir, creating subdirs. */
+export function copyFiles(srcDir: string, destDir: string, files: string[]): void {
+  for (const rel of files) {
+    const dest = join(destDir, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(join(srcDir, rel), dest);
+  }
 }

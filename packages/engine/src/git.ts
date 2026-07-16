@@ -57,8 +57,9 @@ export async function gitLsRemoteTags(url: string): Promise<string[]> {
   return [...names];
 }
 
-/** Shallow-clone a single ref into dest. Success is confirmed by the checkout existing. */
+/** Shallow-clone a single ref into dest. 'HEAD' means the default branch. */
 export async function gitCloneShallow(url: string, ref: string, dest: string): Promise<boolean> {
-  await git(['clone', '--depth', '1', '--branch', ref, url, dest], 60_000);
+  const branch = ref === 'HEAD' ? [] : ['--branch', ref];
+  await git(['clone', '--depth', '1', ...branch, url, dest], 60_000);
   return existsSync(dest) && existsSync(`${dest}/.git`);
 }
