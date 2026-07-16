@@ -85,3 +85,14 @@ test('scan re-labels a loose skill as github-skill when a source matches', async
   assert.equal(skillItem?.source_path, '.claude/skills/ui-ux-pro-max');
   assert.equal(skillItem?.installed_version, '2.11.0');
 });
+
+test('scan reads frontmatter version into installed_version', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'spur-home-'));
+  process.env.SPUR_HOME = mkdtempSync(join(tmpdir(), 'spur-store-'));
+  const skill = join(home, '.claude', 'skills', 'impeccable');
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(join(skill, 'SKILL.md'), '---\nname: impeccable\nversion: 3.9.1\n---\nbody\n');
+  const db = openDb(join(home, 'index.db'));
+  const { items } = await scan(db, { home, discoverProjects: false });
+  assert.equal(items.find((i) => i.name === 'impeccable')?.installed_version, '3.9.1');
+});

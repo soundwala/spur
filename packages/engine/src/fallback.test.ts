@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { realVersion, relSourcePath, catalogVersionFor, versionOutcome } from './fallback.js';
+import { realVersion, relSourcePath, catalogVersionFor, versionOutcome, frontmatterVersion, skillDirVersion } from './fallback.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 test('realVersion filters the manifest "unknown" sentinel and blanks', () => {
   assert.equal(realVersion('1.2.3'), '1.2.3');
@@ -31,4 +34,18 @@ test('versionOutcome compares installed vs upstream versions', () => {
   assert.equal(versionOutcome('1.0.0', '1.1.0'), 'stale');
   assert.equal(versionOutcome(null, '1.0.0'), null); // can't decide
   assert.equal(versionOutcome('1.0.0', null), null);
+});
+
+test('frontmatterVersion reads version from frontmatter only', () => {
+  assert.equal(frontmatterVersion('---\nname: x\nversion: 3.9.1\n---\nbody'), '3.9.1');
+  assert.equal(frontmatterVersion('---\nname: x\n---\nversion: 9.9.9'), null); // body doesn't count
+  assert.equal(frontmatterVersion('---\nname: x\nversion: unknown\n---\n'), null); // sentinel filtered
+  assert.equal(frontmatterVersion('no frontmatter'), null);
+});
+
+test('skillDirVersion reads SKILL.md in a dir', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'spur-fm-'));
+  writeFileSync(join(dir, 'SKILL.md'), '---\nname: imp\nversion: 3.9.1\n---\n');
+  assert.equal(skillDirVersion(dir), '3.9.1');
+  assert.equal(skillDirVersion(join(dir, 'nope')), null);
 });

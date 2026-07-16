@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ScannedItem, Scope } from './types.js';
 import { resolveDir } from './resolve.js';
-import { realVersion, relSourcePath } from './fallback.js';
+import { realVersion, relSourcePath, frontmatterVersion } from './fallback.js';
 import { selfItem } from './self.js';
 import { upsertEntries, pruneMissing } from './db.js';
 import { resolveSource } from './sources.js';
@@ -60,7 +60,7 @@ export async function scan(db: DatabaseSync, opts: ScanOptions = {}): Promise<Sc
     item.source_url = hit.source.repo;
     item.source_ref = hit.source.ref;
     item.source_path = hit.subpath;
-    item.installed_version = hit.source.adopted_version ?? item.installed_version ?? null;
+    item.installed_version = item.installed_version ?? hit.source.adopted_version ?? null;
   }
 
   upsertEntries(db, deduped);
@@ -191,6 +191,7 @@ async function scanSkillsDir(dir: string, scope: Scope, projectPath: string | nu
       install_path: skillDir,
       project_path: projectPath,
       content_hash: createHash('sha256').update(raw).digest('hex').slice(0, 16),
+      installed_version: frontmatterVersion(raw),
       ...resolved,
     });
   }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { EntryStatus } from './types.js';
 
 /**
@@ -30,4 +32,19 @@ export function catalogVersionFor(catalog: unknown, name: string): string | null
 export function versionOutcome(installed: string | null, upstream: string | null): Extract<EntryStatus, 'fresh' | 'stale'> | null {
   if (!installed || !upstream) return null;
   return installed === upstream ? 'fresh' : 'stale';
+}
+
+/** `version:` from a SKILL.md frontmatter block; the "unknown" sentinel filters to null. */
+export function frontmatterVersion(raw: string): string | null {
+  const fm = raw.match(/^---\s*\n([\s\S]*?)\n---/);
+  return realVersion(fm?.[1]?.match(/^version:\s*(.+)\s*$/m)?.[1]?.trim());
+}
+
+/** frontmatterVersion of <dir>/SKILL.md; null when missing or unreadable. */
+export function skillDirVersion(dir: string): string | null {
+  try {
+    return frontmatterVersion(readFileSync(join(dir, 'SKILL.md'), 'utf8'));
+  } catch {
+    return null;
+  }
 }
