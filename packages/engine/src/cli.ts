@@ -19,6 +19,7 @@ Usage:
   spur dashboard      start the local dashboard and open it in your browser
   spur adopt <repo-url>            record a GitHub repo as the source for matching installed skills
   spur add <repo-url> --skill <n>  install skill(s) from a GitHub repo (or --all)
+  spur restore [id]    list backups, or restore one (made by forced updates)
 
 Options:
   --db <path>       index location (default: ~/.spur/index.db, or $SPUR_HOME)
@@ -28,6 +29,7 @@ Options:
   --all             (add) install every skill the repo provides
   --scope <s>       (add) user | project (default: user)
   --project <path>  write provenance to <path>/.spur.json instead of the global store
+  --to <path>       (restore) restore to a different location
   -h, --help        show this help
 `;
 
@@ -42,6 +44,7 @@ async function main(): Promise<void> {
       skill: { type: 'string', multiple: true },
       scope: { type: 'string' },
       project: { type: 'string' },
+      to: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -54,6 +57,17 @@ async function main(): Promise<void> {
   if (command === 'dashboard') {
     startDashboard({ open: true });
     return; // server keeps the event loop alive
+  }
+  if (command === 'restore') {
+    const { listBackups, restoreBackup } = await import('./backup.js');
+    const id = positionals[1];
+    if (!id) {
+      process.stdout.write(JSON.stringify(listBackups(), null, values.compact ? 0 : 2) + '\n');
+      return;
+    }
+    const res = restoreBackup(id, { to: values.to });
+    process.stdout.write(JSON.stringify(res, null, values.compact ? 0 : 2) + '\n');
+    return;
   }
   const dbPath = values.db ?? defaultDbPath();
   const db = openDb(dbPath);
@@ -101,7 +115,7 @@ async function main(): Promise<void> {
       process.stdout.write(JSON.stringify(results, null, values.compact ? 0 : 2) + '\n');
       return;
     }
-    if (!['scan', 'check', 'status', 'update', 'adopt', 'add', 'all'].includes(command)) {
+    if (!['scan', 'check', 'status', 'update', 'adopt', 'add', 'restore', 'all'].includes(command)) {
       process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
       process.exitCode = 2;
       return;

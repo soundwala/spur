@@ -12,3 +12,4 @@ export {
 } from './sources.js';
 export { realRepoOps, latestTag, type RepoOps, type TagInfo } from './repo.js';
 export { startDashboard } from './dashboard/server.js';
+export { createBackup, listBackups, restoreBackup, type BackupInfo } from './backup.js';
