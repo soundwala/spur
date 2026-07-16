@@ -25,6 +25,8 @@ function entry(over: Partial<Entry> = {}): Entry {
     last_check_error: null,
     is_self: false,
     content_hash: null,
+    pristine_hash: null,
+    pristine_manifest: null,
     manifest_updated_at: null,
     first_seen_at: null,
     last_scanned_at: null,

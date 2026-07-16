@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS entries (
   last_check_error  TEXT,
   is_self           INTEGER NOT NULL DEFAULT 0,
   content_hash      TEXT,
+  pristine_hash     TEXT,
+  pristine_manifest TEXT,
   manifest_updated_at TEXT,
   first_seen_at     TEXT,
   last_scanned_at   TEXT,
@@ -62,6 +64,8 @@ function migrate(db: DatabaseSync): void {
     ['source_path', 'TEXT'],
     ['manifest_updated_at', 'TEXT'],
     ['marketplace', 'TEXT'],
+    ['pristine_hash', 'TEXT'],
+    ['pristine_manifest', 'TEXT'],
   ] as const) {
     if (!existing.has(column)) db.exec(`ALTER TABLE entries ADD COLUMN ${column} ${type}`);
   }
@@ -175,4 +179,10 @@ export function updateCheckResult(
 
 function rowToEntry(row: Record<string, unknown>): Entry {
   return { ...row, is_self: row.is_self === 1 } as unknown as Entry;
+}
+
+/** Record (or clear) the pristine baseline for one copy. */
+export function setPristine(db: DatabaseSync, id: string, hash: string | null, manifest: string[] | null): void {
+  db.prepare('UPDATE entries SET pristine_hash = ?, pristine_manifest = ? WHERE id = ?')
+    .run(hash, manifest ? JSON.stringify(manifest) : null, id);
 }

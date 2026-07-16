@@ -8,7 +8,7 @@ export type Scope = 'user' | 'project';
  * unknown_source = permanently uncheckable (no source recorded anywhere);
  * error = a source exists but the last check failed (transient).
  */
-export type EntryStatus = 'fresh' | 'stale' | 'unknown_source' | 'error' | 'unchecked';
+export type EntryStatus = 'fresh' | 'stale' | 'modified' | 'unverified' | 'unknown_source' | 'error' | 'unchecked';
 
 /** One row per installed copy, keyed by absolute install path. */
 export interface Entry {
@@ -39,6 +39,10 @@ export interface Entry {
   first_seen_at: string | null;
   last_scanned_at: string | null;
   last_checked_at: string | null;
+  /** Hash of the upstream-shipped files at the installed version (per copy). */
+  pristine_hash: string | null;
+  /** JSON array of the relative paths upstream shipped (scope of the pristine hash). */
+  pristine_manifest: string | null;
 }
 
 /** What scanners emit; the db layer fills in id, status and bookkeeping timestamps. */
@@ -64,6 +68,8 @@ export interface StatusSummary {
   total: number;
   fresh: number;
   stale: number;
+  modified: number;
+  unverified: number;
   unknown_source: number;
   error: number;
   unchecked: number;

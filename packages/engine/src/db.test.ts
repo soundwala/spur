@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDb, upsertEntries, pruneMissing, allEntries, updateCheckResult, entryId } from './db.js';
+import { openDb, upsertEntries, pruneMissing, allEntries, updateCheckResult, entryId, setPristine } from './db.js';
 import type { ScannedItem } from './types.js';
 
 function tempDb() {
@@ -74,4 +74,18 @@ test('marketplace name round-trips through upsert', () => {
   const db = tempDb();
   upsertEntries(db, [item({ install_method: 'marketplace', marketplace: 'official' })]);
   assert.equal(allEntries(db)[0]?.marketplace, 'official');
+});
+
+test('setPristine round-trips and survives a rescan upsert', () => {
+  const db = openDb(join(mkdtempSync(join(tmpdir(), 'spur-pr-')), 'i.db'));
+  const item = { name: 's', type: 'skill', install_method: 'github-skill', scope: 'user', install_path: '/x/s' } as const;
+  upsertEntries(db, [item as any]);
+  const e = allEntries(db)[0]!;
+  setPristine(db, e.id, 'abc123', ['SKILL.md', 'data/a.csv']);
+  upsertEntries(db, [item as any]); // rescan same item
+  const after = allEntries(db)[0]!;
+  assert.equal(after.pristine_hash, 'abc123');
+  assert.deepEqual(JSON.parse(after.pristine_manifest!), ['SKILL.md', 'data/a.csv']);
+  setPristine(db, e.id, null, null);
+  assert.equal(allEntries(db)[0]!.pristine_hash, null);
 });

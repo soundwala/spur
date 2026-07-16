@@ -4,10 +4,12 @@ import { allEntries } from './db.js';
 
 const STATUS_ORDER: Record<string, number> = {
   stale: 0,
-  error: 1,
-  unchecked: 2,
-  unknown_source: 3,
-  fresh: 4,
+  modified: 1,
+  unverified: 2,
+  error: 3,
+  unchecked: 4,
+  unknown_source: 5,
+  fresh: 6,
 };
 
 /** The one read API both surfaces render. Stale entries sort first. */
@@ -24,7 +26,10 @@ export function getStatus(db: DatabaseSync, dbPath: string): StatusReport {
 }
 
 function summarize(entries: Entry[]): StatusSummary {
-  const summary: StatusSummary = { total: entries.length, fresh: 0, stale: 0, unknown_source: 0, error: 0, unchecked: 0 };
+  const summary: StatusSummary = {
+    total: entries.length, fresh: 0, stale: 0, modified: 0, unverified: 0,
+    unknown_source: 0, error: 0, unchecked: 0,
+  };
   for (const e of entries) {
     if (e.status in summary) summary[e.status as keyof Omit<StatusSummary, 'total'>]++;
   }
