@@ -7,6 +7,7 @@ import type { SkillSource } from './types.js';
 import {
   loadStore, resolveSource, isLocal, markLocal, upsertSource, setAdoptedVersion,
 } from './sources.js';
+import { setIgnore, clearIgnore, ignoreValueFor } from './sources.js';
 
 function freshHome(): string {
   const home = mkdtempSync(join(tmpdir(), 'spur-src-'));
@@ -65,4 +66,16 @@ test('setAdoptedVersion updates the recorded baseline', () => {
   upsertSource(src({ adopted_version: '2.10.1' }));
   setAdoptedVersion('ui-ux-pro-max', null, '2.11.0');
   assert.equal(loadStore().sources[0]!.adopted_version, '2.11.0');
+});
+
+test('setIgnore/clearIgnore by skill name or repo url', () => {
+  freshHome();
+  upsertSource(src());
+  assert.equal(setIgnore('ui-ux-pro-max', '2.12.0'), true);       // by skill name
+  assert.equal(ignoreValueFor('ui-ux-pro-max', null), '2.12.0');
+  assert.equal(setIgnore('https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', 'repo'), true); // by repo
+  assert.equal(ignoreValueFor('ui-ux-pro-max', null), 'repo');
+  assert.equal(clearIgnore('ui-ux-pro-max'), true);
+  assert.equal(ignoreValueFor('ui-ux-pro-max', null), null);
+  assert.equal(setIgnore('no-such-thing', 'repo'), false);
 });

@@ -217,3 +217,31 @@ test('unchecked is refused without --force and backed up under --force', async (
   const { spurHome } = await import('./db.js');
   assert.equal(rf(j(spurHome(), 'backups', backup.id, 'files', 'SKILL.md'), 'utf8'), 'MY EDITS');
 });
+
+test('bulk update skips ignored repos; explicit id still proceeds', async () => {
+  const db = tempDb();
+  process.env.SPUR_HOME = mkdtempSync(join(tmpdir(), 'spur-ig-'));
+  const { upsertSource, setIgnore } = await import('./sources.js');
+  upsertSource({
+    repo: 'https://github.com/x/y', ref: null, version_source: 'tag',
+    skills: { igskill: '.claude/skills/igskill' }, adopted_version: '1.0.0', ignore: null,
+  });
+  setIgnore('igskill', 'repo');
+  upsertEntries(db, [{
+    name: 'igskill', type: 'skill', install_method: 'github-skill', scope: 'user',
+    install_path: '/x/igskill', source_url: 'https://github.com/x/y',
+    source_path: '.claude/skills/igskill',
+  } as any]);
+  const e = allEntries(db)[0]!;
+  db.prepare("UPDATE entries SET status='stale', latest_version='1.1.0' WHERE id=?").run(e.id);
+
+  const calls: string[] = [];
+  const spyOps: RepoOps = {
+    tags: async () => { calls.push('tags'); return [{ tag: 'v1.1.0', version: '1.1.0' }]; },
+    checkout: async () => null, // will fail if reached — fine, we only assert selection
+  };
+  const bulk = await update(db, { all: true }, ok, spyOps);
+  assert.equal(bulk.length, 0);            // ignored → not selected
+  const explicit = await update(db, { ids: [e.id] }, ok, spyOps);
+  assert.equal(explicit.length, 1);         // asking by id overrides the mute
+});

@@ -79,7 +79,7 @@ export async function adopt(
       }
     }
 
-    upsertSource({ repo, ref: null, version_source: 'tag', skills, adopted_version }, { project: opts.project });
+    upsertSource({ repo, ref: null, version_source: 'tag', skills, adopted_version, ignore: null }, { project: opts.project });
     return { repo, tracked, adopted_version };
   } finally {
     await co.cleanup();

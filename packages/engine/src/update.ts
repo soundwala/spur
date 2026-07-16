@@ -8,7 +8,7 @@ import type { RepoOps } from './repo.js';
 import { realRepoOps, listShippedFiles, hashManifest, copyFiles } from './repo.js';
 import { skillDirVersion } from './fallback.js';
 import { createBackup } from './backup.js';
-import { setAdoptedVersion } from './sources.js';
+import { setAdoptedVersion, ignoreValueFor } from './sources.js';
 
 export type UpdateOutcome = 'updated' | 'skipped' | 'failed';
 
@@ -55,7 +55,14 @@ export async function update(
   run: CommandRunner = realRunner,
   repoOps: RepoOps = realRepoOps,
 ): Promise<UpdateResult[]> {
-  const targets = selectTargets(allEntries(db), opts);
+  let targets = selectTargets(allEntries(db), opts);
+  if (!opts.ids?.length) {
+    targets = targets.filter((e) => {
+      if (e.install_method !== 'github-skill') return true;
+      const ig = ignoreValueFor(e.name, e.project_path);
+      return !(ig === 'repo' || (ig !== null && ig === e.latest_version));
+    });
+  }
   const results: UpdateResult[] = [];
   for (const entry of targets) {
     let result: UpdateResult;

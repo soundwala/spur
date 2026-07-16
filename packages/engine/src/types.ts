@@ -34,6 +34,8 @@ export interface Entry {
   last_check_error: string | null;
   is_self: boolean;
   content_hash: string | null;
+  /** Computed by getStatus, not stored: true when this entry's update is currently muted. */
+  ignored?: boolean;
   /** lastUpdated from installed_plugins.json — anchor for the commit-activity fallback. */
   manifest_updated_at: string | null;
   first_seen_at: string | null;
@@ -89,6 +91,8 @@ export interface SkillSource {
   version_source: 'tag';              // latest semver tag is the version signal
   skills: Record<string, string>;     // skill name -> subpath within the repo
   adopted_version: string | null;     // recorded baseline; null = decide by content
+  /** "x.y.z" = skip that version; "repo" = mute the repo; null/absent = normal. */
+  ignore?: string | null;
 }
 
 export interface SourceStore {

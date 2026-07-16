@@ -82,6 +82,7 @@ function mergeSource(store: SourceStore, incoming: SkillSource): void {
   existing.skills = { ...existing.skills, ...incoming.skills };
   existing.ref = incoming.ref;
   existing.adopted_version = incoming.adopted_version;
+  existing.ignore = incoming.ignore ?? existing.ignore ?? null;
 }
 
 export function setAdoptedVersion(name: string, projectPath: string | null, version: string): void {
@@ -100,4 +101,32 @@ export function setAdoptedVersion(name: string, projectPath: string | null, vers
   }
   const store = loadStore();
   if (apply(store)) saveStore(store);
+}
+
+function findByNameOrRepo(store: SourceStore, key: string): SkillSource | undefined {
+  return store.sources.find((s) => s.repo === key || s.skills[key] !== undefined);
+}
+
+/** Set the ignore value ("x.y.z" or "repo") on the source matching a skill name or repo url. */
+export function setIgnore(nameOrRepo: string, value: string): boolean {
+  const store = loadStore();
+  const source = findByNameOrRepo(store, nameOrRepo);
+  if (!source) return false;
+  source.ignore = value;
+  saveStore(store);
+  return true;
+}
+
+export function clearIgnore(nameOrRepo: string): boolean {
+  const store = loadStore();
+  const source = findByNameOrRepo(store, nameOrRepo);
+  if (!source) return false;
+  source.ignore = null;
+  saveStore(store);
+  return true;
+}
+
+/** The ignore value covering a skill name, project store winning; null = not ignored. */
+export function ignoreValueFor(name: string, projectPath: string | null): string | null {
+  return resolveSource(name, projectPath)?.source.ignore ?? null;
 }

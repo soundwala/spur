@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { openDb, defaultDbPath, entryId, setPristine } from './db.js';
+import { openDb, defaultDbPath, entryId, setPristine, allEntries } from './db.js';
 import { scan } from './scan.js';
 import { check } from './check.js';
 import { getStatus } from './status.js';
@@ -20,6 +20,8 @@ Usage:
   spur adopt <repo-url>            record a GitHub repo as the source for matching installed skills
   spur add <repo-url> --skill <n>  install skill(s) from a GitHub repo (or --all)
   spur restore [id]    list backups, or restore one (made by forced updates)
+  spur ignore <name>   mute update notifications (--version <v> for one version, --repo for the whole repo)
+  spur unignore <name> resume update notifications
 
 Options:
   --db <path>       index location (default: ~/.spur/index.db, or $SPUR_HOME)
@@ -47,6 +49,8 @@ async function main(): Promise<void> {
       project: { type: 'string' },
       to: { type: 'string' },
       force: { type: 'boolean', default: false },
+      version: { type: 'string' },
+      repo: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -118,7 +122,28 @@ async function main(): Promise<void> {
       process.stdout.write(JSON.stringify(results, null, values.compact ? 0 : 2) + '\n');
       return;
     }
-    if (!['scan', 'check', 'status', 'update', 'adopt', 'add', 'restore', 'all'].includes(command)) {
+    if (command === 'ignore' || command === 'unignore') {
+      const name = positionals[1];
+      if (!name) { process.stderr.write(`usage: spur ${command} <skill-or-repo>\n`); process.exitCode = 2; return; }
+      const { setIgnore, clearIgnore } = await import('./sources.js');
+      if (command === 'unignore') {
+        process.stdout.write(JSON.stringify({ name, cleared: clearIgnore(name) }) + '\n');
+        return;
+      }
+      let value: string | null = values.repo ? 'repo' : (values.version ?? null);
+      if (!value) {
+        const pending = allEntries(db).find((e) => e.name === name && e.latest_version);
+        if (!pending?.latest_version) {
+          process.stderr.write('no pending version known — run `spur check` first, or pass --version <v> / --repo\n');
+          process.exitCode = 2;
+          return;
+        }
+        value = pending.latest_version;
+      }
+      process.stdout.write(JSON.stringify({ name, ignore: value, set: setIgnore(name, value) }) + '\n');
+      return;
+    }
+    if (!['scan', 'check', 'status', 'update', 'adopt', 'add', 'restore', 'ignore', 'unignore', 'all'].includes(command)) {
       process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
       process.exitCode = 2;
       return;
