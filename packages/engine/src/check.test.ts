@@ -96,13 +96,13 @@ test('git (non-marketplace) entries still decide staleness by commit', async () 
   assert.equal(out.status, 'stale');
 });
 
-function fakeRepo(version: string, subpathContent: string): RepoOps {
+function fakeRepo(version: string | null, subpathContent: string): RepoOps {
   const root = mkdtempSync(join(tmpdir(), 'spur-fake-'));
   const sub = join(root, '.claude', 'skills', 'ui-ux-pro-max');
   mkdirSync(sub, { recursive: true });
   writeFileSync(join(sub, 'SKILL.md'), subpathContent);
   return {
-    tags: async () => [{ tag: `v${version}`, version }],
+    tags: async () => (version ? [{ tag: `v${version}`, version }] : []),
     checkout: async () => ({ dir: root, cleanup: async () => {} }),
   };
 }
@@ -118,10 +118,12 @@ function ghEntry(over: Partial<Entry> = {}): Entry {
   });
 }
 
-test('github-skill: recorded version behind latest tag -> stale', async () => {
+test('github-skill: recorded version behind latest tag, no pristine baseline -> unverified', async () => {
+  // Without a pristine baseline we can't prove the installed copy is unmodified,
+  // so a version gap can no longer be reported as the honest-sounding "stale".
   const ops = fakeRepo('2.11.0', 'anything');
   const out = await checkEntry(ghEntry({ installed_version: '2.10.1' }), lsRemoteTo('x'), noCatalog, false, undefined, ops);
-  assert.equal(out.status, 'stale');
+  assert.equal(out.status, 'unverified');
   assert.equal(out.latest_version, '2.11.0');
 });
 
@@ -136,13 +138,63 @@ test('github-skill: no recorded version, content matches latest -> fresh', async
   assert.equal(out.status, 'fresh');
 });
 
-test('github-skill: no recorded version, content differs -> stale', async () => {
+test('github-skill: no recorded version, content differs, no pristine baseline -> unverified', async () => {
+  // Same reasoning: content differs from upstream, but with no pristine hash on
+  // record we can't tell "never touched, just old" from "user-edited" — unverified.
   const install = mkdtempSync(join(tmpdir(), 'spur-inst2-'));
   writeFileSync(join(install, 'SKILL.md'), 'OLD');
   const ops = fakeRepo('2.11.0', 'NEW');
   const out = await checkEntry(
     ghEntry({ installed_version: null, install_path: install }),
     lsRemoteTo('x'), noCatalog, false, undefined, ops,
+  );
+  assert.equal(out.status, 'unverified');
+});
+
+test('impeccable shape: tagless repo, frontmatter versions both sides -> fresh, no throw', async () => {
+  const ops = fakeRepo(null, '---\nname: ui-ux-pro-max\nversion: 3.9.1\n---\nbody');
+  const out = await checkEntry(ghEntry({ installed_version: '3.9.1' }), lsRemoteTo('x'), noCatalog, false, undefined, ops);
+  assert.equal(out.status, 'fresh');
+  assert.equal(out.latest_version, '3.9.1');
+});
+
+test('pristine mismatch wins over everything -> modified', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spur-mod-'));
+  writeFileSync(join(install, 'SKILL.md'), 'EDITED BY USER');
+  const ops = fakeRepo('2.11.0', 'upstream');
+  const out = await checkEntry(
+    ghEntry({
+      installed_version: '2.11.0', // versions agree — must NOT report fresh
+      install_path: install,
+      pristine_hash: 'doesnotmatchanything',
+      pristine_manifest: JSON.stringify(['SKILL.md']),
+    }),
+    lsRemoteTo('x'), noCatalog, false, undefined, ops,
+  );
+  assert.equal(out.status, 'modified');
+});
+
+test('version gap without pristine -> unverified, not stale', async () => {
+  const ops = fakeRepo('2.12.0', 'upstream');
+  const out = await checkEntry(
+    ghEntry({ installed_version: '2.10.1', pristine_hash: null, pristine_manifest: null }),
+    lsRemoteTo('x'), noCatalog, false, undefined, ops,
+  );
+  assert.equal(out.status, 'unverified');
+});
+
+test('version gap with pristine intact -> stale (safe to update)', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spur-st-'));
+  writeFileSync(join(install, 'SKILL.md'), 'pristine bytes');
+  const manifest = ['SKILL.md'];
+  const { hashManifest } = await import('./repo.js');
+  const out = await checkEntry(
+    ghEntry({
+      installed_version: '2.10.1', install_path: install,
+      pristine_hash: hashManifest(install, manifest),
+      pristine_manifest: JSON.stringify(manifest),
+    }),
+    lsRemoteTo('x'), noCatalog, false, undefined, fakeRepo('2.12.0', 'upstream'),
   );
   assert.equal(out.status, 'stale');
 });

@@ -2,10 +2,10 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Entry, EntryStatus } from './types.js';
 import { allEntries, updateCheckResult } from './db.js';
-import { catalogVersionFor, versionOutcome } from './fallback.js';
+import { catalogVersionFor, versionOutcome, skillDirVersion } from './fallback.js';
 import { lsRemote } from './git.js';
 import type { RepoOps } from './repo.js';
-import { realRepoOps, latestTag, hashDir } from './repo.js';
+import { realRepoOps, hashManifest, listShippedFiles } from './repo.js';
 
 export interface CheckOptions {
   /** Lifts the GitHub API budget from 60/hr to 5000/hr; also used for private repos. */
@@ -130,21 +130,46 @@ export async function checkEntry(
 
 async function checkGithubSkill(entry: Entry, base: CheckOutcome, repoOps: RepoOps): Promise<CheckOutcome> {
   try {
-    const latest = await latestTag(repoOps, entry.source_url!);
-    if (!latest) return fail(base, 'source repo has no semver version tags');
+    const tags = await repoOps.tags(entry.source_url!);
+    const best = tags[0] ?? null;
 
-    if (entry.installed_version) {
-      const status = versionOutcome(entry.installed_version, latest.version) ?? 'stale';
-      return { ...base, latest_version: latest.version, status, behind_count: status === 'fresh' ? 0 : null };
+    // 1. Safety first: a copy that differs from its known pristine baseline is
+    // modified regardless of version claims — updating would clobber edits.
+    if (entry.pristine_hash && entry.pristine_manifest) {
+      const files = JSON.parse(entry.pristine_manifest) as string[];
+      if (hashManifest(entry.install_path, files) !== entry.pristine_hash) {
+        return { ...base, latest_version: best?.version ?? entry.latest_version, status: 'modified', behind_count: null };
+      }
     }
+    const verified = Boolean(entry.pristine_hash); // copy proven == pristine
 
-    const co = await repoOps.checkout(entry.source_url!, latest.tag);
-    if (!co) return fail(base, 'could not fetch source at latest tag');
+    const byVersion = (installed: string, upstream: string): CheckOutcome => {
+      if (installed === upstream) return { ...base, latest_version: upstream, status: 'fresh', behind_count: 0 };
+      // Without pristine we can't prove the copy is unmodified, so "stale" (= safe
+      // to overwrite) is not an honest claim.
+      return { ...base, latest_version: upstream, status: verified ? 'stale' : 'unverified', behind_count: null };
+    };
+
+    // 2. Cheap path: both versions known without a checkout.
+    if (entry.installed_version && best) return byVersion(entry.installed_version, best.version);
+
+    // 3. Checkout bestRef (or default branch) for frontmatter / content evidence.
+    const co = await repoOps.checkout(entry.source_url!, best?.tag ?? 'HEAD');
+    if (!co) return fail(base, 'could not fetch source repo');
     try {
-      const upstream = hashDir(join(co.dir, entry.source_path ?? ''));
-      const installed = hashDir(entry.install_path);
-      const status = upstream && installed && upstream === installed ? 'fresh' : 'stale';
-      return { ...base, latest_version: latest.version, status, behind_count: status === 'fresh' ? 0 : null };
+      const subtree = join(co.dir, entry.source_path ?? '');
+      const upstreamVer = skillDirVersion(subtree) ?? best?.version ?? null;
+      if (entry.installed_version && upstreamVer) return byVersion(entry.installed_version, upstreamVer);
+
+      const files = listShippedFiles(subtree);
+      if (files.length === 0) return fail(base, `upstream ships no files at ${entry.source_path ?? '/'}`);
+      const same = hashManifest(subtree, files) === hashManifest(entry.install_path, files);
+      return {
+        ...base,
+        latest_version: upstreamVer,
+        status: same ? 'fresh' : verified ? 'stale' : 'unverified',
+        behind_count: same ? 0 : null,
+      };
     } finally {
       await co.cleanup();
     }
