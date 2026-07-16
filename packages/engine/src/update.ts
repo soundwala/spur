@@ -132,8 +132,12 @@ export async function updateOne(
       if (!e.source_url || !e.source_path) {
         return { ...base, outcome: 'skipped', message: 'no source recorded', restart_required: false };
       }
-      if ((e.status === 'modified' || e.status === 'unverified') && !opts.force) {
-        const why = e.status === 'modified' ? 'local changes' : 'cannot verify local copy is unmodified';
+      const provablyPristine = e.status === 'stale' || e.status === 'fresh';
+      if (!provablyPristine && !opts.force) {
+        const why =
+          e.status === 'modified' ? 'local changes'
+          : e.status === 'unverified' ? 'cannot verify local copy is unmodified'
+          : 'not yet checked';
         return {
           ...base, outcome: 'skipped', restart_required: false,
           message: `${why} — skipped; rerun with --force to overwrite (a backup will be made)`,
@@ -152,7 +156,7 @@ export async function updateOne(
           }
           // Backup BEFORE any write; createBackup throws → caught below, nothing written.
           let backupNote = '';
-          if (e.status === 'modified' || e.status === 'unverified') {
+          if (!provablyPristine) {
             backupNote = ` (backup: ${createBackup(e, `forced update over ${e.status}`).id})`;
           }
           copyFiles(subtree, e.install_path, files);

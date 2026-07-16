@@ -197,3 +197,23 @@ test('stale update: no backup, prunes upstream-deleted files, keeps user files',
   const { listBackups } = await import('./backup.js');
   assert.equal(listBackups().length, 0); // nothing to lose → no backup
 });
+
+test('unchecked is refused without --force and backed up under --force', async () => {
+  const { install, entry, repoOps } = ghFixture();
+
+  const refused = await updateOne(entry('unchecked'), okRun, repoOps);
+  assert.equal(refused.outcome, 'skipped');
+  assert.match(refused.message, /--force/);
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'MY EDITS');
+
+  const r = await updateOne(entry('unchecked'), okRun, repoOps, { force: true });
+  assert.equal(r.outcome, 'updated');
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'NEW');
+  const { listBackups } = await import('./backup.js');
+  assert.equal(listBackups().length, 1);
+  const backup = listBackups()[0]!;
+  const { readFileSync: rf } = await import('node:fs');
+  const { join: j } = await import('node:path');
+  const { spurHome } = await import('./db.js');
+  assert.equal(rf(j(spurHome(), 'backups', backup.id, 'files', 'SKILL.md'), 'utf8'), 'MY EDITS');
+});
