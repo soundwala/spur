@@ -98,3 +98,25 @@ test('untraceable rows render Set source and Mark local actions; local rows are 
   assert.match(html, /Local \(1\)/);
   assert.match(html, /Untraceable \(1\)/);
 });
+
+test('modified rows: behind zone, amber badge, no checkbox', () => {
+  const rows = groupEntries(
+    [entry({ install_method: 'github-skill', status: 'modified' as any, name: 'x', installed_version: null, latest_version: '2.12.0' })],
+    new Set(),
+  );
+  assert.equal(rows[0]!.zone, 'behind');
+  assert.equal(rows[0]!.updatable, false);
+  const html = renderPage([entry({ install_method: 'github-skill', status: 'modified' as any, installed_version: null, latest_version: null })]);
+  assert.match(html, /badge-warn">modified/);
+  assert.doesNotMatch(html, /badge-danger">modified/);
+});
+
+test('ignored rows leave Behind for the Ignored section', () => {
+  const e = entry({ install_method: 'github-skill', status: 'stale', name: 'muted-skill', installed_version: '1.0.0', latest_version: '1.1.0' });
+  (e as any).ignored = true;
+  const rows = groupEntries([e], new Set());
+  assert.equal(rows[0]!.zone, 'ignored');
+  assert.equal(rows[0]!.updatable, false);
+  const html = renderPage([e]);
+  assert.match(html, /Ignored \(1\)/);
+});

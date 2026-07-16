@@ -26,7 +26,7 @@ function columns(e: Entry): { installed: string; latest: string } {
 export interface GroupedRow {
   name: string;
   install_method: InstallMethod;
-  zone: 'behind' | 'fresh' | 'untraceable' | 'local';
+  zone: 'behind' | 'fresh' | 'untraceable' | 'local' | 'ignored';
   status: EntryStatus;
   locations: string[];
   ids: string[];
@@ -36,15 +36,16 @@ export interface GroupedRow {
   updatable: boolean;
 }
 
-const STATUS_RANK: Record<string, number> = { stale: 0, error: 1, unchecked: 2, unknown_source: 3, fresh: 4 };
+const STATUS_RANK: Record<string, number> = { stale: 0, modified: 1, unverified: 2, error: 3, unchecked: 4, unknown_source: 5, fresh: 6 };
 
 function rollUp(copies: Entry[]): EntryStatus {
   return copies.map((c) => c.status).sort((a, b) => (STATUS_RANK[a] ?? 9) - (STATUS_RANK[b] ?? 9))[0]!;
 }
 
-function zoneOf(status: EntryStatus, name: string, local: Set<string>): GroupedRow['zone'] {
+function zoneOf(status: EntryStatus, name: string, local: Set<string>, ignored: boolean): GroupedRow['zone'] {
   if (status === 'unknown_source') return local.has(name) ? 'local' : 'untraceable';
-  if (status === 'stale') return 'behind';
+  if (ignored && (status === 'stale' || status === 'modified' || status === 'unverified')) return 'ignored';
+  if (status === 'stale' || status === 'modified' || status === 'unverified') return 'behind';
   return 'fresh';
 }
 
@@ -62,10 +63,11 @@ export function groupEntries(entries: Entry[], local: Set<string>): GroupedRow[]
     const e = copies[0]!;
     const status = rollUp(copies);
     const { installed, latest } = columns(e);
+    const ignored = copies.some((c) => (c as { ignored?: boolean }).ignored === true);
     rows.push({
       name: e.name,
       install_method: e.install_method,
-      zone: zoneOf(status, e.name, local),
+      zone: zoneOf(status, e.name, local, ignored),
       status,
       locations: copies.map((c) => c.project_path ?? c.scope),
       ids: copies.map((c) => c.id),
@@ -73,7 +75,7 @@ export function groupEntries(entries: Entry[], local: Set<string>): GroupedRow[]
       latest,
       behind_count: e.behind_count,
       updatable:
-        status === 'stale' &&
+        status === 'stale' && !ignored &&
         (e.install_method === 'marketplace' || e.install_method === 'git' || e.install_method === 'github-skill'),
     });
   }
@@ -81,7 +83,10 @@ export function groupEntries(entries: Entry[], local: Set<string>): GroupedRow[]
 }
 
 function badge(g: GroupedRow): string {
+  if (g.zone === 'ignored') return 'badge-muted">stale · ignored';
   if (g.status === 'stale') return `badge-danger">stale${g.behind_count ? ` · ${g.behind_count}` : ''}`;
+  if (g.status === 'modified') return 'badge-warn">modified';
+  if (g.status === 'unverified') return 'badge-warn">unverified';
   if (g.status === 'fresh') return 'badge-success">fresh';
   if (g.status === 'unknown_source') return g.zone === 'local' ? 'badge-muted">local' : 'badge-muted">untraceable';
   return `badge-muted">${esc(g.status)}`;
@@ -118,13 +123,14 @@ export function renderPage(entries: Entry[], opts: { local?: string[] } = {}): s
   const fresh = rows.filter((g) => g.zone === 'fresh');
   const untraceable = rows.filter((g) => g.zone === 'untraceable');
   const localRows = rows.filter((g) => g.zone === 'local');
+  const ignoredRows = rows.filter((g) => g.zone === 'ignored');
   const trackedCount = rows.filter((g) => g.install_method === 'github-skill').length;
 
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPUR — Skill & Plugin Update Radar</title>
 <style>
   :root { color-scheme: light dark; --bg:#fff; --fg:#111; --mut:#6b7280; --line:#e5e7eb; --card:#f6f6f4; --danger:#dc2626; --dbg:#fdeaea; --ok:#16a34a; --okbg:#e8f6ee; --accent:#185FA5; }
-  @media (prefers-color-scheme: dark){ :root{ --bg:#1a1a19; --fg:#eee; --mut:#9a9a95; --line:#333; --card:#242422; --dbg:#3a1f1f; --okbg:#12301f; } }
+  @media (prefers-color-scheme: dark){ :root{ --bg:#1a1a19; --fg:#eee; --mut:#9a9a95; --line:#333; --card:#242422; --dbg:#3a1f1f; --okbg:#12301f; } .badge-warn{ background:#3a2d18; color:#e8a33d; } }
   body{ font:14px/1.6 system-ui,sans-serif; color:var(--fg); background:var(--bg); margin:0; padding:2rem; }
   .wrap{ max-width:960px; margin:0 auto; }
   h1{ font-size:20px; font-weight:500; margin:0; display:flex; align-items:center; gap:10px; }
@@ -140,6 +146,7 @@ export function renderPage(entries: Entry[], opts: { local?: string[] } = {}): s
   .mono{ font-family:ui-monospace,monospace; } .muted{ color:var(--mut); }
   .badge{ padding:3px 10px; border-radius:999px; font-size:12px; font-weight:500; }
   .badge-danger{ background:var(--dbg); color:var(--danger); } .badge-success{ background:var(--okbg); color:var(--ok); } .badge-muted{ background:var(--card); color:var(--mut); }
+  .badge-warn{ background:#fdf3e3; color:#b45309; }
   .act{ white-space:nowrap; text-align:right; }
   .mini{ font:inherit; font-size:12px; padding:4px 8px; border-radius:6px; border:.5px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
   details{ margin-top:1rem; border:.5px solid var(--line); border-radius:12px; overflow:hidden; }
@@ -175,6 +182,11 @@ export function renderPage(entries: Entry[], opts: { local?: string[] } = {}): s
   <details>
     <summary>Untraceable (${untraceable.length}) — source-less skills; set a GitHub source to track them</summary>
     <table><tbody>${untraceable.length ? section(untraceable, true) : '<tr><td class="muted">None 🎉</td></tr>'}</tbody></table>
+  </details>
+
+  <details>
+    <summary>Ignored (${ignoredRows.length}) — muted updates; run "spur unignore &lt;name&gt;" to resume</summary>
+    <table><tbody>${ignoredRows.length ? section(ignoredRows) : '<tr><td class="muted">None</td></tr>'}</tbody></table>
   </details>
 
   <details>
