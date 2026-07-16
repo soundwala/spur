@@ -1,17 +1,19 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { DatabaseSync } from 'node:sqlite';
-import type { SkillSource } from './types.js';
-import { allEntries } from './db.js';
-import { upsertSource } from './sources.js';
+import type { SkillSource, Entry } from './types.js';
+import { allEntries, setPristine } from './db.js';
+import { upsertSource, loadStore } from './sources.js';
+import { skillDirVersion } from './fallback.js';
 import {
-  realRepoOps, latestTag, discoverSkills, hashDir, copyDirOver, type RepoOps, type TagInfo,
+  realRepoOps, discoverSkills, listShippedFiles, hashManifest, copyDirOver, type RepoOps,
 } from './repo.js';
 
 export interface AdoptResult {
   repo: string;
   tracked: string[];
   adopted_version: string | null;
+  already_tracked?: boolean;
 }
 
 const MAX_TAG_WALK = 10;
@@ -22,73 +24,73 @@ export async function adopt(
   opts: { project?: string } = {},
   repoOps: RepoOps = realRepoOps,
 ): Promise<AdoptResult> {
-  const tags = await repoOps.tags(repo);
-  const latest = tags[0];
-  if (!latest) throw new Error('source repo has no semver version tags');
-
-  const co = await repoOps.checkout(repo, latest.tag);
+  const tags = await repoOps.tags(repo);       // [] is fine — fall back to HEAD
+  const best = tags[0] ?? null;
+  const co = await repoOps.checkout(repo, best?.tag ?? 'HEAD');
   if (!co) throw new Error('could not fetch source repo');
   try {
-    const repoSkills = discoverSkills(co.dir); // name -> subpath
+    const repoSkills = discoverSkills(co.dir);
+    const candidates = allEntries(db).filter((e) => e.install_method === 'unknown' && repoSkills[e.name]);
+    const tracked = [...new Set(candidates.map((e) => e.name))];
 
-    // Match not-yet-tracked loose skills by name. Match on install_method
-    // ('unknown') rather than status, so adoption works whether or not a check
-    // has run yet (a fresh scan leaves loose skills 'unchecked', not
-    // 'unknown_source').
-    const untraceable = allEntries(db).filter((e) => e.install_method === 'unknown' && repoSkills[e.name]);
-    const tracked = [...new Set(untraceable.map((e) => e.name))];
     if (tracked.length === 0) {
+      const existing = loadStore().sources.find((s) => s.repo === repo);
+      if (existing) {
+        return { repo, tracked: Object.keys(existing.skills), adopted_version: existing.adopted_version, already_tracked: true };
+      }
       return { repo, tracked: [], adopted_version: null };
     }
 
     const skills: Record<string, string> = {};
     for (const name of tracked) skills[name] = repoSkills[name]!;
 
-    // Baseline: compare one representative install against the latest tag, then
-    // walk back a bounded number of tags to name an older version.
-    const sample = untraceable[0]!;
-    const installedHash = hashDir(sample.install_path);
+    // Per-copy: a content match against this ref names the version AND establishes pristine.
     let adopted_version: string | null = null;
-    if (installedHash) {
-      if (installedHash === hashDir(join(co.dir, skills[sample.name]!))) {
-        adopted_version = latest.version;
+    const unmatched: Entry[] = [];
+    for (const e of candidates) {
+      const subtree = join(co.dir, skills[e.name]!);
+      const files = listShippedFiles(subtree);
+      if (files.length > 0 && hashManifest(subtree, files) === hashManifest(e.install_path, files)) {
+        setPristine(db, e.id, hashManifest(e.install_path, files), files);
+        adopted_version ??= skillDirVersion(subtree) ?? best?.version ?? null;
       } else {
-        adopted_version = await nameVersionByContent(repoOps, repo, tags, skills[sample.name]!, installedHash);
+        unmatched.push(e);
       }
     }
 
-    const source: SkillSource = { repo, ref: null, version_source: 'tag', skills, adopted_version };
-    upsertSource(source, { project: opts.project });
+    // Bounded walk over older tags to identify (and pristine) copies that didn't match the latest.
+    for (const t of tags.slice(1, MAX_TAG_WALK)) {
+      if (unmatched.length === 0) break;
+      const older = await repoOps.checkout(repo, t.tag);
+      if (!older) continue;
+      try {
+        for (let i = unmatched.length - 1; i >= 0; i--) {
+          const e = unmatched[i]!;
+          const subtree = join(older.dir, skills[e.name]!);
+          const files = listShippedFiles(subtree);
+          if (files.length > 0 && hashManifest(subtree, files) === hashManifest(e.install_path, files)) {
+            setPristine(db, e.id, hashManifest(e.install_path, files), files);
+            adopted_version ??= t.version;
+            unmatched.splice(i, 1);
+          }
+        }
+      } finally {
+        await older.cleanup();
+      }
+    }
+
+    upsertSource({ repo, ref: null, version_source: 'tag', skills, adopted_version }, { project: opts.project });
     return { repo, tracked, adopted_version };
   } finally {
     await co.cleanup();
   }
 }
 
-/** Walk recent tags (newest→oldest, bounded) and return the first whose subpath matches the installed hash. */
-async function nameVersionByContent(
-  repoOps: RepoOps,
-  repo: string,
-  tags: TagInfo[],
-  subpath: string,
-  installedHash: string,
-): Promise<string | null> {
-  for (const t of tags.slice(0, MAX_TAG_WALK)) {
-    const co = await repoOps.checkout(repo, t.tag);
-    if (!co) continue;
-    try {
-      if (hashDir(join(co.dir, subpath)) === installedHash) return t.version;
-    } finally {
-      await co.cleanup();
-    }
-  }
-  return null;
-}
-
 export interface InstallResult {
   repo: string;
   installed: string[];
   version: string;
+  pristine: Array<{ install_path: string; hash: string; manifest: string[] }>;
 }
 
 export async function install(
@@ -96,9 +98,9 @@ export async function install(
   opts: { skills?: string[]; all?: boolean; scope: 'user' | 'project'; projectPath?: string; home?: string },
   repoOps: RepoOps = realRepoOps,
 ): Promise<InstallResult> {
-  const latest = await latestTag(repoOps, repo);
-  if (!latest) throw new Error('source repo has no semver version tags');
-  const co = await repoOps.checkout(repo, latest.tag);
+  const tags = await repoOps.tags(repo);
+  const best = tags[0] ?? null;
+  const co = await repoOps.checkout(repo, best?.tag ?? 'HEAD');
   if (!co) throw new Error('could not fetch source repo');
   try {
     const repoSkills = discoverSkills(co.dir);
@@ -111,17 +113,23 @@ export async function install(
 
     const skills: Record<string, string> = {};
     const installed: string[] = [];
+    const pristine: InstallResult['pristine'] = [];
     for (const name of chosen) {
       const subpath = repoSkills[name];
       if (!subpath) throw new Error(`repo does not provide a skill named "${name}"`);
-      copyDirOver(join(co.dir, subpath), join(base, name));
+      const files = listShippedFiles(join(co.dir, subpath));
+      const dest = join(base, name);
+      copyDirOver(join(co.dir, subpath), dest);
       skills[name] = subpath;
       installed.push(name);
+      pristine.push({ install_path: dest, hash: hashManifest(dest, files), manifest: files });
     }
 
-    const source: SkillSource = { repo, ref: null, version_source: 'tag', skills, adopted_version: latest.version };
+    const version = skillDirVersion(join(co.dir, repoSkills[chosen[0]!] ?? '')) ?? best?.version ?? 'unknown';
+
+    const source: SkillSource = { repo, ref: null, version_source: 'tag', skills, adopted_version: version };
     upsertSource(source, { project: opts.scope === 'project' ? opts.projectPath : undefined });
-    return { repo, installed, version: latest.version };
+    return { repo, installed, version, pristine };
   } finally {
     await co.cleanup();
   }

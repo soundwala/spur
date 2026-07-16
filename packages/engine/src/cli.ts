@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { openDb, defaultDbPath } from './db.js';
+import { openDb, defaultDbPath, entryId, setPristine } from './db.js';
 import { scan } from './scan.js';
 import { check } from './check.js';
 import { getStatus } from './status.js';
@@ -98,6 +98,7 @@ async function main(): Promise<void> {
         projectPath: values.project,
       });
       await scan(db);
+      for (const p of res.pristine) setPristine(db, entryId(p.install_path), p.hash, p.manifest);
       await check(db, { enrich: !values['no-enrich'] });
       process.stdout.write(JSON.stringify(res, null, values.compact ? 0 : 2) + '\n');
       return;
