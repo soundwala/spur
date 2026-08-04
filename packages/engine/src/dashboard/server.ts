@@ -20,6 +20,12 @@ async function readJson(req: import('node:http').IncomingMessage): Promise<any> 
 export function startDashboard(opts: { port?: number; open?: boolean } = {}): Server {
   const port = opts.port ?? PORT;
   const server = createServer(async (req, res) => {
+    const host = (req.headers.host ?? '').split(':')[0];
+    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]' && host !== '::1') {
+      res.writeHead(403, { 'content-type': 'text/plain' });
+      res.end('forbidden: non-local host');
+      return;
+    }
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const db = openDb();
     try {

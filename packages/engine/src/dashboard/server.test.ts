@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import { request } from 'node:http';
 import { startDashboard } from './server.js';
 
 test('a malformed update body returns 400 and the server stays up', async () => {
@@ -61,6 +62,34 @@ test('adopt with a missing repo body returns 400 and the server stays up', async
     });
     assert.equal(bad.status, 400);
     assert.equal((await fetch(`http://127.0.0.1:${port}/`)).status, 200);
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
+
+test('a request with a non-local Host header is rejected 403', async () => {
+  process.env.SPUR_HOME = mkdtempSync(join(tmpdir(), 'spur-dash-host-'));
+  const server = startDashboard({ port: 0, open: false });
+  await once(server, 'listening');
+  const port = (server.address() as AddressInfo).port;
+  try {
+    // Test evil Host header (Node.js fetch doesn't support custom Host, so use http.request)
+    const evilStatus = await new Promise<number>((resolve) => {
+      const req = request(`http://127.0.0.1:${port}/api/status`, {
+        headers: { Host: 'evil.example.com' }
+      }, (res) => {
+        resolve(res.statusCode ?? 500);
+        res.on('data', () => {});
+      });
+      req.on('error', () => resolve(500));
+      req.end();
+    });
+    assert.equal(evilStatus, 403);
+
+    // Test default Host (127.0.0.1:<port> is used automatically)
+    const ok = await fetch(`http://127.0.0.1:${port}/api/status`);
+    assert.equal(ok.status, 200);
   } finally {
     server.close();
     await once(server, 'close');
