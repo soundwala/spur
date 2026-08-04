@@ -20,11 +20,12 @@ Usage:
   spur adopt <repo-url>            record a GitHub repo as the source for matching installed skills
   spur add <repo-url> --skill <n>  install skill(s) from a GitHub repo (or --all)
   spur restore [id]    list backups, or restore one (made by forced updates)
-  spur ignore <name>   mute update notifications (--version <v> for one version, --repo for the whole repo)
-  spur unignore <name> resume update notifications
+  spur ignore <name> [version]   mute updates: a version (default: current latest), or --repo for the whole repo
+  spur unignore <name>           resume update notifications
 
 Options:
   --db <path>       index location (default: ~/.spur/index.db, or $SPUR_HOME)
+  --version         print the installed SPUR version
   --no-enrich       skip GitHub compare-API enrichment (behind_count)
   --compact         single-line JSON output
   --skill <name>    (add) skill to install; repeatable
@@ -49,13 +50,19 @@ async function main(): Promise<void> {
       project: { type: 'string' },
       to: { type: 'string' },
       force: { type: 'boolean', default: false },
-      version: { type: 'string' },
+      version: { type: 'boolean', short: 'v', default: false },
       repo: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
   if (values.help) {
     process.stdout.write(HELP);
+    return;
+  }
+  if (values.version) {
+    const { createRequire } = await import('node:module');
+    const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
+    process.stdout.write(pkg.version + '\n');
     return;
   }
 
@@ -130,11 +137,11 @@ async function main(): Promise<void> {
         process.stdout.write(JSON.stringify({ name, cleared: clearIgnore(name) }) + '\n');
         return;
       }
-      let value: string | null = values.repo ? 'repo' : (values.version ?? null);
+      let value: string | null = values.repo ? 'repo' : (positionals[2] ?? null);
       if (!value) {
         const pending = allEntries(db).find((e) => e.name === name && e.latest_version);
         if (!pending?.latest_version) {
-          process.stderr.write('no pending version known — run `spur check` first, or pass --version <v> / --repo\n');
+          process.stderr.write('no pending version known — run `spur check` first, or pass a version: `spur ignore <name> <version>` (or --repo)\n');
           process.exitCode = 2;
           return;
         }
