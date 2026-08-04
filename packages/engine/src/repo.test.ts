@@ -77,6 +77,17 @@ test('listShippedFiles excludes runtime droppings, sorted posix paths', () => {
   assert.deepEqual(listShippedFiles(join(dir, 'nope')), []);
 });
 
+test('listShippedFiles excludes node_modules, .venv, and *.log', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'spur-ig2-'));
+  writeFileSync(join(dir, 'SKILL.md'), 'x');
+  mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true });
+  writeFileSync(join(dir, 'node_modules', 'dep', 'index.js'), 'x');
+  mkdirSync(join(dir, '.venv', 'bin'), { recursive: true });
+  writeFileSync(join(dir, '.venv', 'bin', 'python'), 'x');
+  writeFileSync(join(dir, 'run.log'), 'noise');
+  assert.deepEqual(listShippedFiles(dir), ['SKILL.md']);
+});
+
 test('hashManifest: extra files ignored, edits and deletions detected', () => {
   const a = mkdtempSync(join(tmpdir(), 'spur-hm-'));
   writeFileSync(join(a, 'SKILL.md'), 'body');

@@ -120,7 +120,7 @@ export function copyDirOver(srcDir: string, destDir: string): void {
   cpSync(srcDir, destDir, { recursive: true, force: true });
 }
 
-const IGNORED_DIRS = new Set(['.git', '__pycache__']);
+const IGNORED_DIRS = new Set(['.git', '__pycache__', 'node_modules', '.venv']);
 const IGNORED_FILES = new Set(['.DS_Store']);
 
 /** Sorted upstream-shipped files under dir: excludes runtime droppings. */
@@ -131,7 +131,7 @@ export function listShippedFiles(dir: string): string[] {
       const parts = rel.split('/');
       if (parts.some((p) => IGNORED_DIRS.has(p))) return false;
       const base = parts[parts.length - 1]!;
-      return !IGNORED_FILES.has(base) && !base.endsWith('.pyc');
+      return !IGNORED_FILES.has(base) && !base.endsWith('.pyc') && !base.endsWith('.log');
     })
     .sort();
 }
