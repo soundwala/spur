@@ -20,8 +20,9 @@ spur dashboard    # start the local dashboard and open it in your browser
 spur adopt <repo> # record a GitHub repo as the source for matching installed skills
 spur add <repo>   # install skill(s) from a GitHub repo (--skill <name>… or --all)
 spur restore [id] # restore a skill from its most recent pre-update backup
-spur ignore <name>   # skip a skill (or repo) in future update runs
+spur ignore <name> [version]   # mute a version (or --repo for the whole repo)
 spur unignore <name> # clear a previously set ignore
+spur --version   # print the installed version
 ```
 
 Options: `--db <path>` (default `~/.spur/index.db`), `--no-enrich` (skip GitHub compare-API behind-counts), `--all` (update every stale entry, or install every skill a repo ships), `--skill <name>` (repeatable, for `add`), `--scope user|project`, `--project <path>` (write provenance to `<path>/.spur.json`), `--compact`.

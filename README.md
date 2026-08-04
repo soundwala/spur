@@ -51,7 +51,7 @@ spur adopt <repo-url>            # teach SPUR where a hand-installed skill came 
 spur add <repo-url> --skill <n>  # install a skill straight from a GitHub repo (or --all)
 
 spur restore [id]      # roll a skill back to its most recent pre-update backup
-spur ignore <name>     # skip a skill (or repo) in future update runs
+spur ignore <name> [version]  # mute a version (or --repo for the whole repo)
 spur unignore <name>   # clear a previously set ignore
 ```
 

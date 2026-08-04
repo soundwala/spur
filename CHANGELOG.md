@@ -4,6 +4,22 @@ All notable changes to `@soundwala/spur` are documented here. This project
 follows [semantic versioning](https://semver.org/); `0.x` releases may change
 behavior between minor versions while the tool is in early access.
 
+## 0.3.2
+
+- Update-time safety: SPUR re-checks a skill's files at update time, so a copy
+  edited between `spur check` and `spur update` is no longer silently
+  overwritten (backed up under `--force`).
+- `spur --version` (and `-v`) now print the installed version; `spur ignore`
+  takes the version positionally: `spur ignore <name> [version]`.
+- `spur ignore` now writes a project's `.spur.json` when the skill's source
+  lives there, not just the global store.
+- Pristine checks ignore `node_modules/`, `.venv/`, and `*.log`, so skills that
+  create those at runtime don't show as "modified".
+- Dashboard rejects requests with a non-local `Host` header (DNS-rebinding
+  hardening).
+- Chat slash commands updated for adopt / ignore / restore and the
+  modified/unverified states. Added CI (Node 22 + 24).
+
 ## 0.3.1
 
 First public release. (Versions 0.1.0–0.3.0 were pre-public development and are
