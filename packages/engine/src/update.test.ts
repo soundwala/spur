@@ -120,10 +120,12 @@ test('github-skill update re-fetches the subpath and overwrites files', async ()
     checkout: async () => ({ dir: repoDir, cleanup: async () => {} }),
   };
 
+  const { hashManifest } = await import('./repo.js');
   const entry = {
     id: 'x', name: 'ui-ux-pro-max', install_method: 'github-skill', scope: 'user',
     status: 'stale', install_path: install, source_url: 'https://github.com/x/y',
     source_path: '.claude/skills/ui-ux-pro-max', project_path: null,
+    pristine_hash: hashManifest(install, ['SKILL.md']), pristine_manifest: JSON.stringify(['SKILL.md']),
   } as unknown as Entry;
 
   const result = await updateOne(entry, async () => ({ ok: true, stdout: '', stderr: '' }), repoOps);
@@ -189,7 +191,13 @@ test('stale update: no backup, prunes upstream-deleted files, keeps user files',
   const { install, entry, repoOps } = ghFixture();
   writeFileSync(join(install, 'old-upstream.txt'), 'shipped once'); // in old manifest below
   writeFileSync(join(install, 'notes.mine'), 'user file');
-  const e = { ...(entry('stale') as any), pristine_manifest: JSON.stringify(['SKILL.md', 'old-upstream.txt']) };
+  const { hashManifest } = await import('./repo.js');
+  const manifest = ['SKILL.md', 'old-upstream.txt'];
+  const e = {
+    ...(entry('stale') as any),
+    pristine_manifest: JSON.stringify(manifest),
+    pristine_hash: hashManifest(install, manifest),
+  };
   const r = await updateOne(e, okRun, repoOps);
   assert.equal(r.outcome, 'updated');
   assert.equal(existsSync(join(install, 'old-upstream.txt')), false); // pruned (upstream-owned)
@@ -216,6 +224,40 @@ test('unchecked is refused without --force and backed up under --force', async (
   const { join: j } = await import('node:path');
   const { spurHome } = await import('./db.js');
   assert.equal(rf(j(spurHome(), 'backups', backup.id, 'files', 'SKILL.md'), 'utf8'), 'MY EDITS');
+});
+
+test('TOCTOU: a stale copy edited since check is refused without --force and backed up with it', async () => {
+  const { install, entry, repoOps } = ghFixture();
+  // Make the entry genuinely pristine-at-check: pristine_hash matches the CURRENT install bytes...
+  const { hashManifest } = await import('./repo.js');
+  const e0 = entry('stale');
+  (e0 as any).pristine_hash = hashManifest(install, ['SKILL.md']); // 'MY EDITS' == pristine, status stale
+  // ...then the user edits the file AFTER the check that produced 'stale'.
+  writeFileSync(join(install, 'SKILL.md'), 'EDITED SINCE CHECK');
+
+  // Without --force: must refuse (live hash no longer matches pristine), files untouched.
+  const skipped = await updateOne(e0, okRun, repoOps);
+  assert.equal(skipped.outcome, 'skipped');
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'EDITED SINCE CHECK');
+
+  // With --force: backs up the edited copy first, then overwrites.
+  const forced = await updateOne(e0, okRun, repoOps, { force: true });
+  assert.equal(forced.outcome, 'updated');
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'NEW');
+  const { listBackups } = await import('./backup.js');
+  assert.equal(readFileSync(join(process.env.SPUR_HOME!, 'backups', listBackups()[0]!.id, 'files', 'SKILL.md'), 'utf8'), 'EDITED SINCE CHECK');
+});
+
+test('a stale copy that is still pristine updates cleanly with no backup', async () => {
+  const { install, entry, repoOps } = ghFixture();
+  const { hashManifest } = await import('./repo.js');
+  const e0 = entry('stale');
+  (e0 as any).pristine_hash = hashManifest(install, ['SKILL.md']); // matches current bytes, unedited
+  const r = await updateOne(e0, okRun, repoOps);
+  assert.equal(r.outcome, 'updated');
+  assert.equal(readFileSync(join(install, 'SKILL.md'), 'utf8'), 'NEW');
+  const { listBackups } = await import('./backup.js');
+  assert.equal(listBackups().length, 0); // pristine → nothing to back up
 });
 
 test('bulk update skips ignored repos; explicit id still proceeds', async () => {

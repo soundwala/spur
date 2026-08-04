@@ -139,12 +139,18 @@ export async function updateOne(
       if (!e.source_url || !e.source_path) {
         return { ...base, outcome: 'skipped', message: 'no source recorded', restart_required: false };
       }
-      const provablyPristine = e.status === 'stale' || e.status === 'fresh';
+      // Re-verify at update time, not from the (possibly stale) check status: a
+      // copy edited between `check` and `update` must not be silently clobbered.
+      const baseline = e.pristine_hash && e.pristine_manifest
+        ? (JSON.parse(e.pristine_manifest) as string[])
+        : null;
+      const provablyPristine = baseline !== null
+        && hashManifest(e.install_path, baseline) === e.pristine_hash;
       if (!provablyPristine && !opts.force) {
         const why =
           e.status === 'modified' ? 'local changes'
           : e.status === 'unverified' ? 'cannot verify local copy is unmodified'
-          : 'not yet checked';
+          : 'changed since last check';
         return {
           ...base, outcome: 'skipped', restart_required: false,
           message: `${why} — skipped; rerun with --force to overwrite (a backup will be made)`,
