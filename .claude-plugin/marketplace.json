@@ -1,0 +1,14 @@
+{
+  "name": "soundwala",
+  "owner": {
+    "name": "Shanks",
+    "url": "https://github.com/soundwala"
+  },
+  "plugins": [
+    {
+      "name": "spur",
+      "source": "./packages/claude-plugin",
+      "description": "SPUR — Skill & Plugin Update Radar. Tracks every installed Claude Code skill/plugin across install methods and tells you which are out of date vs their source repos."
+    }
+  ]
+}

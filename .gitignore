@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+*.log
+.spur/
+
+# Internal planning / handoff notes — kept locally, not published
+docs/

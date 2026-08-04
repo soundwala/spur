@@ -1,0 +1,15 @@
+{
+  "name": "spur-monorepo",
+  "private": true,
+  "description": "SPUR — Skill & Plugin Update Radar. Monorepo: engine (npm: @soundwala/spur), Claude Code plugin surface, local dashboard surface.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "build": "npm run build -w @soundwala/spur",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
