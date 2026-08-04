@@ -133,13 +133,15 @@ async function main(): Promise<void> {
       const name = positionals[1];
       if (!name) { process.stderr.write(`usage: spur ${command} <skill-or-repo>\n`); process.exitCode = 2; return; }
       const { setIgnore, clearIgnore } = await import('./sources.js');
+      const match = allEntries(db).find((e) => e.name === name);
+      const projectPath = match?.project_path ?? null;
       if (command === 'unignore') {
-        process.stdout.write(JSON.stringify({ name, cleared: clearIgnore(name) }) + '\n');
+        process.stdout.write(JSON.stringify({ name, cleared: clearIgnore(name, projectPath) }) + '\n');
         return;
       }
       let value: string | null = values.repo ? 'repo' : (positionals[2] ?? null);
       if (!value) {
-        const pending = allEntries(db).find((e) => e.name === name && e.latest_version);
+        const pending = match?.latest_version ? match : undefined;
         if (!pending?.latest_version) {
           process.stderr.write('no pending version known — run `spur check` first, or pass a version: `spur ignore <name> <version>` (or --repo)\n');
           process.exitCode = 2;
@@ -147,7 +149,7 @@ async function main(): Promise<void> {
         }
         value = pending.latest_version;
       }
-      process.stdout.write(JSON.stringify({ name, ignore: value, set: setIgnore(name, value) }) + '\n');
+      process.stdout.write(JSON.stringify({ name, ignore: value, set: setIgnore(name, value, projectPath) }) + '\n');
       return;
     }
     if (!['scan', 'check', 'status', 'update', 'adopt', 'add', 'restore', 'ignore', 'unignore', 'all'].includes(command)) {

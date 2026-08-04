@@ -107,8 +107,17 @@ function findByNameOrRepo(store: SourceStore, key: string): SkillSource | undefi
   return store.sources.find((s) => s.repo === key || s.skills[key] !== undefined);
 }
 
-/** Set the ignore value ("x.y.z" or "repo") on the source matching a skill name or repo url. */
-export function setIgnore(nameOrRepo: string, value: string): boolean {
+/** Set ignore ("x.y.z" or "repo") on the matching source; project store wins when projectPath is given. */
+export function setIgnore(nameOrRepo: string, value: string, projectPath?: string | null): boolean {
+  if (projectPath) {
+    const project = loadProjectStore(projectPath);
+    const hit = project && findByNameOrRepo(project, nameOrRepo);
+    if (project && hit) {
+      hit.ignore = value;
+      writeFileSync(join(projectPath, '.spur.json'), JSON.stringify(project, null, 2));
+      return true;
+    }
+  }
   const store = loadStore();
   const source = findByNameOrRepo(store, nameOrRepo);
   if (!source) return false;
@@ -117,7 +126,16 @@ export function setIgnore(nameOrRepo: string, value: string): boolean {
   return true;
 }
 
-export function clearIgnore(nameOrRepo: string): boolean {
+export function clearIgnore(nameOrRepo: string, projectPath?: string | null): boolean {
+  if (projectPath) {
+    const project = loadProjectStore(projectPath);
+    const hit = project && findByNameOrRepo(project, nameOrRepo);
+    if (project && hit) {
+      hit.ignore = null;
+      writeFileSync(join(projectPath, '.spur.json'), JSON.stringify(project, null, 2));
+      return true;
+    }
+  }
   const store = loadStore();
   const source = findByNameOrRepo(store, nameOrRepo);
   if (!source) return false;

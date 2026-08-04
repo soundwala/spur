@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SkillSource } from './types.js';
 import {
-  loadStore, resolveSource, isLocal, markLocal, upsertSource, setAdoptedVersion,
+  loadStore, resolveSource, isLocal, markLocal, upsertSource, setAdoptedVersion, loadProjectStore,
 } from './sources.js';
 import { setIgnore, clearIgnore, ignoreValueFor } from './sources.js';
 
@@ -78,4 +78,18 @@ test('setIgnore/clearIgnore by skill name or repo url', () => {
   assert.equal(clearIgnore('ui-ux-pro-max'), true);
   assert.equal(ignoreValueFor('ui-ux-pro-max', null), null);
   assert.equal(setIgnore('no-such-thing', 'repo'), false);
+});
+
+test('setIgnore writes to the project store when the source lives there', () => {
+  freshHome();
+  const project = mkdtempSync(join(tmpdir(), 'spur-proj-'));
+  writeFileSync(join(project, '.spur.json'), JSON.stringify({ sources: [src({ repo: 'https://github.com/p/repo' })], local: [] }));
+  // global store has no such source
+  assert.equal(setIgnore('ui-ux-pro-max', '9.9.9', project), true);
+  // written to the PROJECT store, not global
+  assert.equal(loadProjectStore(project)!.sources[0]!.ignore, '9.9.9');
+  assert.equal(loadStore().sources.length, 0);
+  assert.equal(ignoreValueFor('ui-ux-pro-max', project), '9.9.9');
+  assert.equal(clearIgnore('ui-ux-pro-max', project), true);
+  assert.equal(loadProjectStore(project)!.sources[0]!.ignore, null);
 });
